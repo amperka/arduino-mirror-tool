@@ -63,7 +63,7 @@ class _OriginHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *args):  # silence
+    def log_message(self, format: str, *args: object) -> None:  # silence
         pass
 
 

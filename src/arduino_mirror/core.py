@@ -41,9 +41,7 @@ def is_mirrorable(url: str | None, src_prefix: str) -> bool:
     return bool(url) and str(url).startswith(src_prefix)
 
 
-def rewrite_index_url(
-    url: str, target_prefix: str, src_prefix: str
-) -> str:
+def rewrite_index_url(url: str, target_prefix: str, src_prefix: str) -> str:
     """Rewrite a single origin URL to the published mirror (target) prefix.
 
     Only touches URLs that actually start with src_prefix (archive URLs). Other
@@ -52,14 +50,14 @@ def rewrite_index_url(
     """
     if not url or not url.startswith(src_prefix):
         return url
-    return target_prefix + url[len(src_prefix):]
+    return target_prefix + url[len(src_prefix) :]
 
 
 def relpath_of(url: str, src_prefix: str) -> str:
     """Path portion of an origin URL (S3 object key), with no leading slash."""
     if not url.startswith(src_prefix):
         raise ValueError(f"URL not on origin prefix, cannot mirror: {url}")
-    return url[len(src_prefix):].lstrip("/")
+    return url[len(src_prefix) :].lstrip("/")
 
 
 def fetch_json(source: str) -> dict:
