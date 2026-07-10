@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
+[options]
+exclude-newer = "2026-07-03T16:33:36.77336467Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "arduino-mirror"
 version = "0.1.0"

@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Filtered, host-rewritten static mirror of Arduino Boards Manager packages (avr), published to Yandex S3 via GitHub Actions."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Sergei Korolev", email = "knopki@duck.com" },
+]
 dependencies = ["requests>=2.28", "minio>=7.2"]
 
 [project.scripts]
