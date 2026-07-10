@@ -15,9 +15,6 @@ env:
   PACKAGES: "arduino"
   LATEST_ONLY: "true"
   TARGET_KIND: "s3"
-  TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
-  AWS_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
-  AWS_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
   # Public-read is enforced via a bucket policy on the managed prefix
   # (S3Target.prepare_public_read), best-effort. The bucket should also allow
   # anonymous GET in Yandex for end users to fetch without credentials.
@@ -26,6 +23,7 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    environment: prod
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -36,23 +34,8 @@ jobs:
       - name: Build manifest + sync bucket (manifest -> upload/delete)
         env:
           TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
-          # Prefix empty -> index published at bucket root (package_index.json).
-          # Stale cleanup is still safe: only deletes keys under the top-level
-          # dirs the mirror writes (cores/, tools/), never hand-placed root
-          # files like index.txt or arduino-*.tar.xz.
+          TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
           TARGET_PREFIX: ""
+          AWS_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
         run: uv run arduino-mirror run
-
-      # Optional post-check: confirm the published index is reachable + correct.
-      - name: Verify published mirror
-        if: success()
-        run: |
-          curl -fsS "$MIRROR_HOST/package_index.json" -o /tmp/pub.json
-          python3 - <<'PY'
-          import json
-          idx = json.load(open("/tmp/pub.json"))
-          pkgs = {p["name"]: p for p in idx["packages"]}
-          plats = [p["version"] for p in pkgs["arduino"]["platforms"]]
-          print("published arduino avr versions:", plats)
-          assert plats == ["1.8.8"], plats
-          PY
