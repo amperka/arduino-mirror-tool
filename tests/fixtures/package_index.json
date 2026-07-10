@@ -3,19 +3,19 @@
     {
       "name": "arduino",
       "maintainer": "Arduino",
-      "websiteURL": "https://www.arduino.cc/",
-      "url": "https://downloads.arduino.cc",
-      "email": "packages@arduino.cc",
-      "help": {"online": "https://www.arduino.cc/en/Reference/HomePage"},
+      "websiteURL": "http://example.invalid/",
+      "url": "http://127.0.0.1:18099",
+      "email": "packages@example.invalid",
+      "help": {"online": "http://example.invalid/en/Reference/HomePage"},
       "platforms": [
         {
           "name": "Arduino AVR Boards",
           "architecture": "avr",
           "version": "1.8.8",
           "category": "Arduino",
-          "url": "https://downloads.arduino.cc/cores/staging/avr-1.8.8.tar.bz2",
+          "url": "http://127.0.0.1:18099/cores/staging/avr-1.8.8.tar.bz2",
           "archiveFileName": "avr-1.8.8.tar.bz2",
-          "checksum": "SHA-256:a234c2a43dcd01ce54be665806f183b8e6ec4e966d2e3e0c3358b63023d6390c",
+          "checksum": "SHA-256:c816b6e9326cebe7721514288deeaf315affdef42049beb3f6cbbc4b7920304a",
           "size": 7162150,
           "toolsDependencies": [
             {"packager": "arduino", "name": "avrdude", "version": "8.0.0-arduino1"},
@@ -27,7 +27,7 @@
           "architecture": "avr",
           "version": "1.8.7",
           "category": "Arduino",
-          "url": "https://downloads.arduino.cc/cores/staging/avr-1.8.7.tar.bz2",
+          "url": "http://127.0.0.1:18099/cores/staging/avr-1.8.7.tar.bz2",
           "archiveFileName": "avr-1.8.7.tar.bz2",
           "checksum": "SHA-256:deadbeef",
           "size": 7000000,
@@ -40,9 +40,9 @@
           "version": "8.0.0-arduino1",
           "systems": [
             {"host": "x86_64-pc-linux-gnu",
-             "url": "https://downloads.arduino.cc/tools/avrdude_8.0-arduino.1_Linux_64bit.tar.gz",
+             "url": "http://127.0.0.1:18099/tools/avrdude_8.0-arduino.1_Linux_64bit.tar.gz",
              "archiveFileName": "avrdude_8.0-arduino.1_Linux_64bit.tar.gz",
-             "checksum": "SHA-256:1111111111111111111111111111111111111111111111111111111111111111",
+             "checksum": "SHA-256:780a0f22ed0cacb7c4e3e9a5bdb6183cfa385f483cbbdf78731193647c0d5cf4",
              "size": 123456}
           ]
         },
@@ -51,9 +51,9 @@
           "version": "7.3.0-atmel3.6.1-arduino7",
           "systems": [
             {"host": "x86_64-pc-linux-gnu",
-             "url": "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino7-x86_64-pc-linux-gnu.tar.bz2",
+             "url": "http://127.0.0.1:18099/tools/avr-gcc-7.3.0-atmel3.6.1-arduino7-x86_64-pc-linux-gnu.tar.bz2",
              "archiveFileName": "avr-gcc-7.3.0-atmel3.6.1-arduino7-x86_64-pc-linux-gnu.tar.bz2",
-             "checksum": "SHA-256:2222222222222222222222222222222222222222222222222222222222222222",
+             "checksum": "SHA-256:836fe7ebfccf10bf231ed190fbe4bd0097817476136ed9a79bb9bb420a8037d9",
              "size": 654321}
           ]
         }

@@ -14,9 +14,12 @@ import os
 import sys
 from pathlib import Path
 
-from .core import OFFICIAL_INDEX_URL, build_manifest
+from .core import build_manifest
 from .sync import MirrorTarget, sync_bucket
 
+# Defaults for the two URL prefixes, co-located so the CLI is the single
+# source of truth for both src (origin) and target (mirror) values.
+DEFAULT_ORIGIN_PREFIX = "https://downloads.arduino.cc"
 DEFAULT_MIRROR_HOST = "https://arduino-downloads.amperka.ru"
 
 
@@ -39,6 +42,11 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         "--mirror-host",
         default=os.environ.get("MIRROR_HOST", DEFAULT_MIRROR_HOST),
         help="Base URL of the published mirror (rewrites downloads.arduino.cc).",
+    )
+    p.add_argument(
+        "--origin-host",
+        default=DEFAULT_ORIGIN_PREFIX,
+        help="Upstream archive URL prefix to filter/mirror (default: https://downloads.arduino.cc).",
     )
     p.add_argument(
         "--architectures",
@@ -74,6 +82,7 @@ def build_manifest_cmd(args: argparse.Namespace) -> int:
         architectures=args.architectures,
         latest_only=args.latest_only,
         mirror_host=args.mirror_host,
+        src_prefix=args.origin_host,
     )
     args.manifest.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -181,8 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     _common_args(p_m)
     p_m.add_argument(
         "--input",
-        default=os.environ.get("INPUT_INDEX", OFFICIAL_INDEX_URL),
-        help="Official package_index.json URL or path.",
+        default=os.environ.get("INPUT_INDEX"),
+        help="package_index.json URL/path. Default: <origin-host>/packages/package_index.json.",
     )
     p_m.add_argument(
         "--manifest",
@@ -210,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_r = sub.add_parser("run", help="manifest + sync in one shot.")
     _common_args(p_r)
-    p_r.add_argument("--input", default=os.environ.get("INPUT_INDEX", OFFICIAL_INDEX_URL))
+    p_r.add_argument("--input", default=os.environ.get("INPUT_INDEX"))
     p_r.add_argument(
         "--manifest",
         type=Path,
@@ -231,6 +240,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # --input is derived from --origin-host unless explicitly overridden
+    # (CLI flag or INPUT_INDEX env). Index URL is always <origin>/packages/...
+    if not args.input:
+        args.input = args.origin_host.rstrip("/") + "/packages/package_index.json"
     return args.func(args)
 
 

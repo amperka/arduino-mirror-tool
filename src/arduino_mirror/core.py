@@ -2,18 +2,26 @@
 
 This module is import-safe (no network, no rclone) and is the home of the
 pure functions exercised by the test suite.
+
+Mirroring model -- two URL prefixes, period:
+  * src_prefix: where upstream archives live. `objects[].url` keeps it, and
+    sync downloads from it.
+  * target_prefix (--mirror-host): what the published Boards Manager index
+    advertises so clients fetch from us.
+
+An archive URL always STARTS WITH src_prefix. Mirroring = keep object URLs
+on the origin, rewrite the published index src -> target. No host parsing,
+no regex, no env re-reads, no module-level prefix default: the two prefixes
+come in once via CLI and are threaded through build_manifest as required
+arguments. There is no fallback to a hardcoded prefix -- a missing src_prefix
+is a caller bug, surfaced immediately, not silently defaulted.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
-
-ORIGIN_HOST_RE = re.compile(r"https?://downloads\.arduino\.cc")
-
-OFFICIAL_INDEX_URL = "https://downloads.arduino.cc/packages/package_index.json"
 
 
 def verkey(v: str):
@@ -28,46 +36,43 @@ def parse_sha256(checksum: str | None) -> str | None:
     return m.group(1).lower() if m else None
 
 
-def is_mirrorable(url: str | None) -> bool:
-    """True only for archives we mirror (host == downloads.arduino.cc)."""
-    if not url:
-        return False
-    return ORIGIN_HOST_RE.search(url) is not None
+def is_mirrorable(url: str | None, src_prefix: str) -> bool:
+    """True only for archives whose URL starts with the origin (src) prefix."""
+    return bool(url) and str(url).startswith(src_prefix)
 
 
-def rewrite_url(url: str, mirror_host: str) -> str:
-    """Point a downloads.arduino.cc URL at the mirror. Others left as-is."""
-    if not url:
+def rewrite_index_url(
+    url: str, target_prefix: str, src_prefix: str
+) -> str:
+    """Rewrite a single origin URL to the published mirror (target) prefix.
+
+    Only touches URLs that actually start with src_prefix (archive URLs). Other
+    URLs (help, website) pass through unchanged. Download *source* URLs in the
+    manifest objects must NOT be rewritten -- sync fetches them from src.
+    """
+    if not url or not url.startswith(src_prefix):
         return url
-    return ORIGIN_HOST_RE.sub(mirror_host, url, count=1)
+    return target_prefix + url[len(src_prefix):]
 
 
-def relpath_of(url: str) -> str:
-    """Path portion of a downloads.arduino.cc URL (S3 object key, no slash)."""
-    m = ORIGIN_HOST_RE.search(url)
-    if not m:
-        raise ValueError(f"URL not on downloads.arduino.cc, cannot mirror: {url}")
-    return url[m.end() :].lstrip("/")
+def relpath_of(url: str, src_prefix: str) -> str:
+    """Path portion of an origin URL (S3 object key), with no leading slash."""
+    if not url.startswith(src_prefix):
+        raise ValueError(f"URL not on origin prefix, cannot mirror: {url}")
+    return url[len(src_prefix):].lstrip("/")
 
 
 def fetch_json(source: str) -> dict:
     """Load JSON from a URL or a local path.
 
     Uses `requests`, which verifies TLS against certifi's CA bundle by default
-    (no dependency on the system trust store, so it works on python.org macOS
-    builds and minimal Linux containers alike). Override verification with the
-    standard REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE env vars, or disable it with
-    ARDUINO_MIRROR_INSECURE=1 (self-signed internal mirrors).
+    (no dependency on the system trust store). Override the bundle with the
+    standard REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE env vars.
     """
     if source.startswith(("http://", "https://")):
         import requests
 
-        verify = os.environ.get("ARDUINO_MIRROR_INSECURE", "").lower() not in (
-            "1",
-            "true",
-            "yes",
-        )
-        resp = requests.get(source, timeout=60, verify=verify)
+        resp = requests.get(source, timeout=60)
         resp.raise_for_status()
         return resp.json()
     return json.loads(Path(source).read_text(encoding="utf-8"))
@@ -80,11 +85,12 @@ def build_manifest(
     architectures: list[str],
     latest_only: bool,
     mirror_host: str,
+    src_prefix: str,
 ) -> dict:
     """Filter + rewrite an upstream package_index into a mirror manifest.
 
-    Returns a dict with keys: mirror_host, generated_from (unused here),
-    objects (desired mirror files), index (the rewritten Boards Manager index).
+    Returns a dict with keys: mirror_host, objects (desired mirror files),
+    index (the rewritten Boards Manager index).
     """
     kept_pkgs: dict[str, dict] = {}
     kept_tools: set[tuple[str, str, str]] = set()
@@ -114,11 +120,14 @@ def build_manifest(
         meta = kept_pkgs.setdefault(pkg["name"], pkg_skeleton(pkg))
         for p in plats:
             meta["platforms"].append(p)
-            if is_mirrorable(p.get("url")):
+            if is_mirrorable(p.get("url"), src_prefix):
                 objects.append(
                     {
-                        "relpath": relpath_of(p["url"]),
-                        "url": rewrite_url(p["url"], mirror_host),
+                        "relpath": relpath_of(p["url"], src_prefix),
+                        # Download SOURCE url is kept verbatim (origin prefix).
+                        # sync fetches from here; the published index is what
+                        # gets prefix-rewritten for clients.
+                        "url": p["url"],
                         "sha256": parse_sha256(p.get("checksum")),
                         "size": int(p.get("size", 0) or 0),
                     }
@@ -142,20 +151,22 @@ def build_manifest(
             if (pkg["name"], tool["name"], str(tool["version"])) in kept_tools:
                 out["tools"].append(tool)
                 for sys_flavor in tool.get("systems", []):
-                    if is_mirrorable(sys_flavor.get("url")):
+                    if is_mirrorable(sys_flavor.get("url"), src_prefix):
                         objects.append(
                             {
-                                "relpath": relpath_of(sys_flavor["url"]),
-                                "url": rewrite_url(sys_flavor["url"], mirror_host),
+                                "relpath": relpath_of(sys_flavor["url"], src_prefix),
+                                "url": sys_flavor["url"],  # origin prefix, see note above
                                 "sha256": parse_sha256(sys_flavor.get("checksum")),
                                 "size": int(sys_flavor.get("size", 0) or 0),
                             }
                         )
 
-    # Rewrite all URLs in the filtered index (downloads.arduino.cc -> mirror).
+    # Rewrite the published index: every origin (src) URL -> mirror (target).
+    # Object download URLs live in `objects` above and are intentionally left
+    # on the origin so sync pulls from upstream.
     out_index = {"packages": list(kept_pkgs.values())}
     raw = json.dumps(out_index, indent=2, ensure_ascii=False)
-    raw = ORIGIN_HOST_RE.sub(mirror_host, raw)
+    raw = raw.replace(src_prefix, mirror_host)
     out_index = json.loads(raw)
     out_index["packages"] = [
         p for p in out_index["packages"] if p.get("platforms") or p.get("tools")
