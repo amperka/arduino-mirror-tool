@@ -1,0 +1,31 @@
+name: ci
+
+# Code-quality gate. Runs on every push/PR (no S3 secrets needed).
+# The deploy job lives in mirror.yml and must NOT lint/test here.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Lint (ruff + zuban)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run zuban check .
+
+      - name: Run tests
+        run: uv run pytest -q

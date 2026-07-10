@@ -1,0 +1,31 @@
+[project]
+name = "arduino-mirror"
+version = "0.1.0"
+description = "Filtered, host-rewritten static mirror of Arduino Boards Manager packages (avr), published to Yandex S3 via GitHub Actions."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.28"]
+
+[project.scripts]
+arduino-mirror = "arduino_mirror.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.15.20",
+    "zuban>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM"]
+ignore = ["SIM102"]
+
+[tool.zuban]
+
+[tool.uv]
+package = true
