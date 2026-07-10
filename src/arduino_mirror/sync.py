@@ -19,6 +19,7 @@ import sys
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import NoReturn
 
 from .core import managed_keys, top_level_dirs
 
@@ -30,7 +31,7 @@ def _dry_run() -> bool:
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "cache"))
 
 
-def die(msg: str, code: int = 1) -> None:
+def die(msg: str, code: int = 1) -> NoReturn:
     sys.stderr.write(f"ERROR: {msg}\n")
     sys.exit(code)
 
