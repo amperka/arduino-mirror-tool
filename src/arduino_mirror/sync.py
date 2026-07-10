@@ -59,8 +59,14 @@ class MirrorTarget(ABC):
     """
 
     @abstractmethod
-    def list_keys(self) -> dict[str, dict]:
-        """Return ``{key: {"size": int}}`` for every managed object present."""
+    def list_keys(self, prefixes: list[str] | None = None) -> dict[str, dict]:
+        """Return ``{key: {"size": int}}`` for present managed objects.
+
+        If ``prefixes`` is given, only objects whose top-level dir is in that
+        set are listed (e.g. ``["cores", "tools"]``). Foreign files (root files,
+        other directories, the published package_index.json) are never listed,
+        so they are neither protected nor counted.
+        """
 
     @abstractmethod
     def upload_file(self, local_path: Path, key: str) -> None:
@@ -138,7 +144,7 @@ class S3Target(MirrorTarget):
         except Exception as exc:  # noqa: BLE001 - best-effort, non-fatal
             sys.stderr.write(f"  WARNING: could not set public-read policy: {exc}\n")
 
-    def list_keys(self) -> dict[str, dict]:
+    def list_keys(self, prefixes: list[str] | None = None) -> dict[str, dict]:
         present: dict[str, dict] = {}
         for obj in self._client.list_objects(self.bucket, prefix=self.prefix, recursive=True):
             if obj.object_name is None or obj.is_dir:
@@ -147,6 +153,8 @@ class S3Target(MirrorTarget):
             if self.prefix and rel.startswith(self.prefix + "/"):
                 rel = rel[len(self.prefix) + 1 :]
             elif self.prefix and rel == self.prefix:
+                continue
+            if prefixes and rel.split("/", 1)[0] not in set(prefixes):
                 continue
             present[rel] = {"size": int(obj.size or 0)}
         return present
@@ -169,11 +177,21 @@ class LocalTarget(MirrorTarget):
         rel = f"{self.prefix}/{key}" if self.prefix else key
         return self.root / rel
 
-    def list_keys(self) -> dict[str, dict]:
+    def list_keys(self, prefixes: list[str] | None = None) -> dict[str, dict]:
+        present: dict[str, dict] = {}
+        if prefixes:
+            for p in prefixes:
+                base = self._path(p)
+                if not base.exists():
+                    continue
+                for fp in base.rglob("*"):
+                    if fp.is_file():
+                        rel = f"{p}/{fp.relative_to(base).as_posix()}"
+                        present[rel] = {"size": int(fp.stat().st_size)}
+            return present
         base = self._path("")
         if not base.exists():
             return {}
-        present: dict[str, dict] = {}
         for p in base.rglob("*"):
             if p.is_file():
                 rel = str(p.relative_to(base)).replace(os.sep, "/")
@@ -303,7 +321,7 @@ def sync_bucket(
         die("manifest has no managed top-level dirs -> refusing to run")
 
     target.prepare_public_read()
-    present = target.list_keys()
+    present = target.list_keys(prefixes=sorted(managed_dirs))
     desired = {o["relpath"]: o for o in objects}
 
     _managed_desired, managed_stale, protected = managed_keys(present, desired, managed_dirs)

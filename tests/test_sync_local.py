@@ -79,7 +79,7 @@ class _RecordingTarget(MirrorTarget):
     def __init__(self):
         self.uploaded: dict[str, bytes] = {}
 
-    def list_keys(self) -> dict[str, dict]:
+    def list_keys(self, prefixes: list[str] | None = None) -> dict[str, dict]:
         return {k: {"size": len(v)} for k, v in self.uploaded.items()}
 
     def upload_file(self, local_path: Path, key: str) -> None:
@@ -168,10 +168,15 @@ class TestLocalTargetSync(unittest.TestCase):
         sync_bucket(self.manifest, target=self.target)
 
         desired = {o["relpath"] for o in self.manifest["objects"]}
-        present = set(self.target.list_keys())
+        # list_keys() with managed prefixes reflects only member objects
+        # (cores/*, tools/*); the published package_index.json is written by
+        # write_index and is never listed.
+        present = set(self.target.list_keys(prefixes=["cores", "tools"]))
         self.assertLessEqual(desired, present)
-        self.assertIn("package_index.json", present)
+        self.assertEqual(present, desired)
 
+        # Published index is written to disk and points clients at the MIRROR.
+        self.assertTrue((self.mirror_root / "package_index.json").exists())
         idx = json.loads((self.mirror_root / "package_index.json").read_text(encoding="utf-8"))
         self.assertIn("arduino", {p["name"] for p in idx["packages"]})
         # Published index must point clients at the MIRROR host.
