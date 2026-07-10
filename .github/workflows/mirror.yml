@@ -14,12 +14,13 @@ env:
   ARCHITECTURES: "avr"
   PACKAGES: "arduino"
   LATEST_ONLY: "true"
-  RCLONE_CONFIG_STORAGE_TYPE: s3
-  RCLONE_CONFIG_STORAGE_PROVIDER: Other
-  RCLONE_CONFIG_STORAGE_ACL: public-read
-  RCLONE_CONFIG_STORAGE_ENDPOINT: "${{ secrets.RCLONE_CONFIG_STORAGE_ENDPOINT }}"
-  RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID: "${{ secrets.RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID }}"
-  RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY: "${{ secrets.RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY }}"
+  TARGET_KIND: "s3"
+  TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
+  AWS_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
+  AWS_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
+  # Public-read is enforced via a bucket policy on the managed prefix
+  # (S3Target.prepare_public_read), best-effort. The bucket should also allow
+  # anonymous GET in Yandex for end users to fetch without credentials.
 
 jobs:
   mirror:
@@ -32,18 +33,14 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
-
       - name: Build manifest + sync bucket (manifest -> upload/delete)
         env:
-          RCLONE_REMOTE: storage
-          RCLONE_BUCKET: "${{ secrets.RCLONE_BUCKET }}"
+          TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
           # Prefix empty -> index published at bucket root (package_index.json).
           # Stale cleanup is still safe: only deletes keys under the top-level
           # dirs the mirror writes (cores/, tools/), never hand-placed root
           # files like index.txt or arduino-*.tar.xz.
-          RCLONE_PREFIX: ""
+          TARGET_PREFIX: ""
         run: uv run arduino-mirror run
 
       # Optional post-check: confirm the published index is reachable + correct.

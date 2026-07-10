@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from .core import OFFICIAL_INDEX_URL, build_manifest
-from .sync import sync_bucket
+from .sync import MirrorTarget, sync_bucket
 
 DEFAULT_MIRROR_HOST = "https://arduino-downloads.amperka.ru"
 
@@ -94,14 +94,68 @@ def build_manifest_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
-def sync_cmd(args: argparse.Namespace) -> int:
-    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-    sync_bucket(
-        manifest,
-        remote=args.remote,
+def _build_target(args: argparse.Namespace) -> MirrorTarget:
+    from .sync import build_target
+
+    return build_target(
+        kind=args.target,
         bucket=args.bucket,
         prefix=args.prefix,
+        endpoint=args.endpoint,
+        access_key=args.access_key,
+        secret_key=args.secret_key,
+        region=args.region,
+        local_root=args.local_root,
     )
+
+
+def _target_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--target",
+        default=os.environ.get("TARGET_KIND", "s3"),
+        choices=["s3", "local"],
+        help="Storage backend: 's3' (minio/S3-compatible) or 'local' (directory tree).",
+    )
+    p.add_argument(
+        "--bucket",
+        default=os.environ.get("TARGET_BUCKET", ""),
+        help="S3 target bucket name (required for --target s3).",
+    )
+    p.add_argument(
+        "--prefix",
+        default=os.environ.get("TARGET_PREFIX", ""),
+        help="Bucket subdir / local root subdir prefix (default: root).",
+    )
+    p.add_argument(
+        "--endpoint",
+        default=os.environ.get("TARGET_ENDPOINT", ""),
+        help="S3 endpoint, e.g. storage.yandexcloud.net (else AWS_* env).",
+    )
+    p.add_argument(
+        "--access-key",
+        default=os.environ.get("AWS_ACCESS_KEY_ID", ""),
+        help="S3 access key (else AWS_ACCESS_KEY_ID env).",
+    )
+    p.add_argument(
+        "--secret-key",
+        default=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+        help="S3 secret key (else AWS_SECRET_ACCESS_KEY env).",
+    )
+    p.add_argument(
+        "--region",
+        default=os.environ.get("TARGET_REGION", ""),
+        help="S3 region (optional).",
+    )
+    p.add_argument(
+        "--local-root",
+        default=os.environ.get("TARGET_LOCAL_ROOT", "mirror-out"),
+        help="Local target root directory (for --target local).",
+    )
+
+
+def sync_cmd(args: argparse.Namespace) -> int:
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    sync_bucket(manifest, target=_build_target(args))
     return 0
 
 
@@ -144,28 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_m.set_defaults(func=build_manifest_cmd)
 
-    p_s = sub.add_parser("sync", help="Reconcile a bucket against a manifest.")
+    p_s = sub.add_parser("sync", help="Reconcile a target against a manifest.")
     p_s.add_argument(
         "--manifest",
         type=Path,
         default=Path(os.environ.get("MANIFEST_PATH", "manifest.json")),
         help="Manifest to reconcile against (default: manifest.json).",
     )
-    p_s.add_argument(
-        "--remote",
-        default=os.environ.get("RCLONE_REMOTE", "storage"),
-        help="rclone remote name (default: storage).",
-    )
-    p_s.add_argument(
-        "--bucket",
-        default=os.environ.get("RCLONE_BUCKET", ""),
-        help="Target bucket name (required).",
-    )
-    p_s.add_argument(
-        "--prefix",
-        default=os.environ.get("RCLONE_PREFIX", ""),
-        help="Bucket subdir prefix (default: bucket root).",
-    )
+    _target_args(p_s)
     p_s.set_defaults(func=sync_cmd)
 
     p_r = sub.add_parser("run", help="manifest + sync in one shot.")
@@ -182,9 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=_env_bool("DRY_RUN", False),
         help="Build manifest, print plan, skip download/upload.",
     )
-    p_r.add_argument("--remote", default=os.environ.get("RCLONE_REMOTE", "storage"))
-    p_r.add_argument("--bucket", default=os.environ.get("RCLONE_BUCKET", ""))
-    p_r.add_argument("--prefix", default=os.environ.get("RCLONE_PREFIX", ""))
+    _target_args(p_r)
     p_r.set_defaults(func=run_cmd)
 
     return parser

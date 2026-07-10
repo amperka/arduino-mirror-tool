@@ -19,6 +19,12 @@ Static, filtered mirror of Arduino Boards Manager packages for networks where
   dead weight (quota + restore/save time) for zero benefit. New versions are
   rare and pulled once from Arduino's CDN. Local `cache/` only buffers the
   current run's downloads for SHA-256 verification; it is not persisted.
+- **Storage backend is pluggable.** The `sync` step talks to an abstract
+  `MirrorTarget`. Two backends ship: `s3` (minio / S3-compatible, e.g. Yandex
+  S3) and `local` (a plain directory tree with the same key layout). The `local`
+  target needs no credentials and is great for dry runs, offline CI, and
+  previewing the published tree. Pick with `--target s3|local`
+  (env `TARGET_KIND`).
 - **Your hand-placed root files are safe.** The mirror writes `package_index.json`
   and the `cores/`, `tools/` trees. Stale cleanup deletes **only** keys under
   those managed directories. Loose root files you maintain by hand
@@ -53,18 +59,28 @@ arduino-mirror manifest \
   --architectures avr --packages arduino --latest-only \
   --manifest manifest.json
 
-# 2. Reconcile a bucket against an existing manifest.
+# 2. Reconcile an S3 bucket against an existing manifest (minio / S3-compatible).
 arduino-mirror sync \
   --manifest manifest.json \
-  --remote storage --bucket my-bucket --prefix ""
+  --target s3 --bucket my-bucket \
+  --endpoint storage.yandexcloud.net \
+  --prefix ""
+
+# 2b. ...or a local directory tree (no credentials, great for dry runs / previews).
+arduino-mirror sync \
+  --manifest manifest.json \
+  --target local --local-root ./mirror-out
 
 # 3. Do both (the GitHub Actions entrypoint).
 arduino-mirror run
 ```
 
-All flags fall back to environment variables (`MIRROR_HOST`, `ARCHITECTURES`,
-`PACKAGES`, `LATEST_ONLY`, `INPUT_INDEX`, `MANIFEST_PATH`, `RCLONE_REMOTE`,
-`RCLONE_BUCKET`, `RCLONE_PREFIX`, `DRY_RUN`) when not given.
+All flags fall back to environment variables when not given. Target-related
+variables: `TARGET_KIND` (`s3`|`local`, default `s3`), `TARGET_ENDPOINT`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TARGET_REGION`,
+`TARGET_BUCKET` (S3 bucket name), `TARGET_PREFIX`, `TARGET_LOCAL_ROOT`.
+Manifest/input variables: `MIRROR_HOST`, `ARCHITECTURES`, `PACKAGES`,
+`LATEST_ONLY`, `INPUT_INDEX`, `MANIFEST_PATH`, `DRY_RUN`.
 
 ## Develop / test locally
 
@@ -82,10 +98,10 @@ uv run arduino-mirror manifest --dry-run --input official_index.json
 
 ## Repo layout
 
-```
+```text
 src/arduino_mirror/
   core.py        # pure logic: filter, host-rewrite, list-diff helpers
-  sync.py        # rclone wrappers: bucket listing, upload, delete
+  sync.py        # MirrorTarget abstraction + S3Target (minio) / LocalTarget
   cli.py         # arduino-mirror entrypoint (manifest / sync / run)
   __main__.py    # `python -m arduino_mirror`
 .github/workflows/mirror.yml  # scheduled GHA job (test -> manifest -> sync)
@@ -96,14 +112,16 @@ tests/                      # unit tests + fixture index
 
 | name | value |
 |---|---|
-| `RCLONE_CONFIG_STORAGE_ENDPOINT` | Yandex S3 endpoint, e.g. `storage.yandexcloud.net` |
-| `RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID` | S3 access key |
-| `RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY` | S3 secret key |
-| `RCLONE_BUCKET` | target bucket name |
+| `TARGET_ENDPOINT` | Yandex S3 endpoint, e.g. `storage.yandexcloud.net` |
+| `TARGET_ACCESS_KEY_ID` | S3 access key |
+| `TARGET_SECRET_ACCESS_KEY` | S3 secret key |
+| `TARGET_BUCKET` | target bucket name |
 
-The bucket must allow **public read** (anonymous GET) so end users can fetch
-without credentials; `RCLONE_CONFIG_STORAGE_ACL: public-read` is set in the
-workflow, but also enable anonymous read on the bucket/prefix in Yandex.
+These map to the `TARGET_ENDPOINT` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+/ `TARGET_BUCKET` variables the `s3` target reads. The bucket must allow
+**public read** (anonymous GET) so end users can fetch without credentials;
+`S3Target` applies a `public-read` bucket policy on the managed prefix
+(best-effort), but also enable anonymous read on the bucket/prefix in Yandex.
 
 ## Notes / gotchas
 
