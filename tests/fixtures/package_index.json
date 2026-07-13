@@ -205,6 +205,87 @@
           ]
         }
       ]
+    },
+    {
+      "name": "builtin",
+      "maintainer": "Arduino",
+      "websiteURL": "https://www.arduino.cc/",
+      "url": null,
+      "email": "packages@arduino.cc",
+      "help": {"online": "http://example.invalid/builtin-help"},
+      "platforms": [],
+      "tools": [
+        {
+          "name": "ctags",
+          "version": "5.8-arduino11",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/ctags-5.8-arduino11-pm-x86_64-pc-linux-gnu.tar.bz2",
+             "archiveFileName": "ctags-5.8-arduino11-pm-x86_64-pc-linux-gnu.tar.bz2",
+             "checksum": "SHA-256:aaaa01010101010101010101010101010101010101010101010101010101010101",
+             "size": 100001},
+            {"host": "i686-mingw32",
+             "url": "http://127.0.0.1:18099/tools/ctags-5.8-arduino11-pm-i686-w64-mingw32.zip",
+             "archiveFileName": "ctags-5.8-arduino11-pm-i686-w64-mingw32.zip",
+             "checksum": "SHA-256:aaaa02020202020202020202020202020202020202020202020202020202020202",
+             "size": 100002}
+          ]
+        },
+        {
+          "name": "mdns-discovery",
+          "version": "1.1.0",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/discovery/mdns-discovery/mdns-discovery_v1.1.0_Linux_64bit.tar.gz",
+             "archiveFileName": "mdns-discovery_v1.1.0_Linux_64bit.tar.gz",
+             "checksum": "SHA-256:bbbb01010101010101010101010101010101010101010101010101010101010101",
+             "size": 200001},
+            {"host": "i686-mingw32",
+             "url": "http://127.0.0.1:18099/discovery/mdns-discovery/mdns-discovery_v1.1.0_Windows_32bit.tar.gz",
+             "archiveFileName": "mdns-discovery_v1.1.0_Windows_32bit.tar.gz",
+             "checksum": "SHA-256:bbbb02020202020202020202020202020202020202020202020202020202020202",
+             "size": 200002}
+          ]
+        },
+        {
+          "name": "mdns-discovery",
+          "version": "1.0.10",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/discovery/mdns-discovery/mdns-discovery_v1.0.10_Linux_64bit.tar.gz",
+             "archiveFileName": "mdns-discovery_v1.0.10_Linux_64bit.tar.gz",
+             "checksum": "SHA-256:cccc01010101010101010101010101010101010101010101010101010101010101",
+             "size": 200003}
+          ]
+        },
+        {
+          "name": "serial-monitor",
+          "version": "0.15.0",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/monitor/serial-monitor/serial-monitor_v0.15.0_Linux_64bit.tar.gz",
+             "archiveFileName": "serial-monitor_v0.15.0_Linux_64bit.tar.gz",
+             "checksum": "SHA-256:dddd01010101010101010101010101010101010101010101010101010101010101",
+             "size": 300001},
+            {"host": "i686-mingw32",
+             "url": "http://127.0.0.1:18099/monitor/serial-monitor/serial-monitor_v0.15.0_Windows_32bit.tar.gz",
+             "archiveFileName": "serial-monitor_v0.15.0_Linux_64bit.tar.gz",
+             "checksum": "SHA-256:dddd02020202020202020202020202020202020202020202020202020202020202",
+             "size": 300002}
+          ]
+        },
+        {
+          "name": "serial-monitor",
+          "version": "0.14.1",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/monitor/serial-monitor/serial-monitor_v0.14.1_Linux_64bit.tar.gz",
+             "archiveFileName": "serial-monitor_v0.14.1_Linux_64bit.tar.gz",
+             "checksum": "SHA-256:eeee01010101010101010101010101010101010101010101010101010101010101",
+             "size": 300003}
+          ]
+        }
+      ]
     }
   ]
 }

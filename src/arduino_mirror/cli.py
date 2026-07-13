@@ -62,8 +62,10 @@ def _common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--packages",
         type=_split_csv,
-        default=_env_list("PACKAGES", "arduino"),
-        help="Comma-separated packager names to keep (default: arduino).",
+        default=_env_list("PACKAGES", "arduino,builtin"),
+        help="Comma-separated packager names to keep (default: arduino,builtin). "
+        "Packages with no platforms (e.g. builtin) are mirrored as tool-only: "
+        "all tool releases, latest version per tool name, no architecture filter.",
     )
     p.add_argument(
         "--latest-only",

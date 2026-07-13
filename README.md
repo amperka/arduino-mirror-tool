@@ -3,9 +3,10 @@
 Static, filtered mirror of Arduino Boards Manager packages for networks where
 `downloads.arduino.cc` is unreachable. Mirrors the `arduino` package (latest
 versions) across avr, samd, sam, megaavr, mbed_nano, and mbed_rp2040
-architectures by default, and republishes the Boards Manager index with
-archive URLs rewritten to a mirror host. Sync runs weekly (GitHub Actions) or
-on manual dispatch.
+architectures by default, plus the `builtin` package (IDE tools: ctags,
+discoveries, serial-monitor) mirrored wholesale with no architecture filter,
+and republishes the Boards Manager index with archive URLs rewritten to a
+mirror host. Sync runs weekly (GitHub Actions) or on manual dispatch.
 
 ## For end users (no VPN)
 
@@ -33,7 +34,7 @@ host-rewritten index), `sync` (reconcile a target against a manifest), and
 arduino-mirror manifest \
   --input https://downloads.arduino.cc/packages/package_index.json \
   --mirror-host https://arduino-downloads.amperka.ru \
-  --architectures avr --packages arduino --latest-only \
+  --architectures avr --packages arduino,builtin --latest-only \
   --manifest manifest.json
 
 # 2. Reconcile an S3 bucket (minio / S3-compatible) against the manifest.
@@ -97,12 +98,18 @@ The bucket must allow **public read** (anonymous GET). `S3Target` also applies a
 ## Notes / gotchas
 
 - **Size:** the mirror covers six architectures (avr, samd, sam, megaavr,
-  mbed_nano, mbed_rp2040) with all their toolchain dependencies. avr alone is
-  ~270 MB (mostly `avr-gcc`); adding ARM-based cores (samd, sam, mbed_*) pulls
-  in `arm-none-eabi-gcc`, `bossac`, `openocd`, `rp2040tools`, etc. Widen
-  `ARCHITECTURES`/`PACKAGES` only if you accept the bandwidth + storage cost.
+  mbed_nano, mbed_rp2040) with all their toolchain dependencies, plus the
+  `builtin` package's IDE tools (under `tools/`, `discovery/`, `monitor/`).
+  avr alone is ~270 MB (mostly `avr-gcc`); adding ARM-based cores (samd, sam,
+  mbed_*) pulls in `arm-none-eabi-gcc`, `bossac`, `openocd`, `rp2040tools`,
+  etc. Widen `ARCHITECTURES`/`PACKAGES` only if you accept the bandwidth +
+  storage cost.
+- **`builtin` is mirrored without an architecture filter.** It has no
+  platforms — only tool releases — so `--architectures` does not apply to it.
+  With `--latest-only` (the default), only the newest version of each builtin
+  tool name is kept; `--all-versions` keeps every release.
 - **Stale cleanup is directory-scoped.** Only keys under the top-level dirs the
-  mirror writes (`cores/`, `tools/`) are ever deleted; root files and unrelated
-  subdirectories are left untouched.
-- **Empty manifest aborts.** If the upstream index can't be fetched, `sync` exits
-  without touching the bucket.
+  mirror writes (`cores/`, `tools/`, `discovery/`, `monitor/`) are ever
+  deleted; root files and unrelated subdirectories are left untouched.
+- **Empty manifest aborts.** If the upstream index can't be fetched, `sync`
+  exits without touching the bucket.

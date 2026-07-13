@@ -156,6 +156,25 @@ def build_manifest(
     for pkg in index.get("packages", []):
         if pkg.get("name") not in packages:
             continue
+        # Tools-only package (e.g. `builtin`): no platforms, so the
+        # architecture filter is moot -- mirror every tool release, narrowed
+        # to the latest version per tool name when --latest-only is set.
+        if not pkg.get("platforms"):
+            kept_pkgs.setdefault(pkg["name"], pkg_skeleton(pkg))
+            chosen = list(pkg.get("tools", []))
+            if latest_only:
+                by_tool: dict[str, dict] = {}
+                for t in chosen:
+                    tn = t.get("name", "")
+                    cur = by_tool.get(tn)
+                    if cur is None or verkey(t.get("version", "0")) > verkey(
+                        cur.get("version", "0")
+                    ):
+                        by_tool[tn] = t
+                chosen = list(by_tool.values())
+            for t in chosen:
+                kept_tools.add((pkg["name"], t["name"], str(t["version"])))
+            continue
         plats = [p for p in pkg.get("platforms", []) if p.get("architecture") in architectures]
         if not plats:
             continue

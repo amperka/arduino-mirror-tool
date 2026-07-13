@@ -219,6 +219,138 @@ class TestMultiArchManifest(unittest.TestCase):
                     )
 
 
+class TestBuiltinPackage(unittest.TestCase):
+    """The `builtin` package ships IDE tools (ctags, discoveries, monitors)
+    with NO platforms, so the architecture filter does not apply. It must be
+    kept as a tool-only package: all tool releases, narrowed to the latest
+    version per tool name when --latest-only is set.
+    """
+
+    def setUp(self):
+        self.manifest = self._run()
+
+    def _run(self, latest_only=True):
+        env = dict(os.environ)
+        env.update(
+            {
+                "MIRROR_HOST": MIRROR_HOST,
+                "ARCHITECTURES": "avr",
+                "PACKAGES": "arduino,builtin",
+                "LATEST_ONLY": "true" if latest_only else "false",
+                "DRY_RUN": "1",
+            }
+        )
+        out = Path(ROOT / "manifest_builtin.json")
+        if out.exists():
+            out.unlink()
+        rc = main(
+            [
+                "manifest",
+                "--input",
+                str(FIXTURE),
+                "--manifest",
+                str(out),
+                "--mirror-host",
+                MIRROR_HOST,
+                "--origin-host",
+                ORIGIN_HOST,
+                "--architectures",
+                "avr",
+                "--packages",
+                "arduino,builtin",
+            ]
+            + (["--latest-only"] if latest_only else ["--all-versions"])
+        )
+        self.assertEqual(rc, 0)
+        with out.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    def tearDown(self):
+        out = ROOT / "manifest_builtin.json"
+        if out.exists():
+            out.unlink()
+
+    def _builtin(self):
+        return {p["name"]: p for p in self.manifest["index"]["packages"]}["builtin"]
+
+    def test_builtin_kept_with_no_platforms(self):
+        b = self._builtin()
+        self.assertEqual(b["platforms"], [])
+        self.assertTrue(b["tools"], "builtin must keep its tool releases")
+
+    def test_latest_only_keeps_latest_per_tool_name(self):
+        # mdns-discovery@1.1.0 (not 1.0.10), serial-monitor@0.15.0 (not 0.14.1),
+        # ctags@5.8-arduino11 (only version present).
+        by_tool = {}
+        for t in self._builtin()["tools"]:
+            by_tool.setdefault(t["name"], []).append(t["version"])
+        self.assertEqual(by_tool["ctags"], ["5.8-arduino11"])
+        self.assertEqual(by_tool["mdns-discovery"], ["1.1.0"])
+        self.assertEqual(by_tool["serial-monitor"], ["0.15.0"])
+
+    def test_all_versions_keeps_every_tool_release(self):
+        m = self._run(latest_only=False)
+        b = {p["name"]: p for p in m["index"]["packages"]}["builtin"]
+        versions = {(t["name"], t["version"]) for t in b["tools"]}
+        self.assertEqual(
+            versions,
+            {
+                ("ctags", "5.8-arduino11"),
+                ("mdns-discovery", "1.1.0"),
+                ("mdns-discovery", "1.0.10"),
+                ("serial-monitor", "0.15.0"),
+                ("serial-monitor", "0.14.1"),
+            },
+        )
+
+    def test_builtin_tool_urls_rewritten_to_mirror(self):
+        for t in self._builtin()["tools"]:
+            for s in t["systems"]:
+                self.assertTrue(
+                    s["url"].startswith(MIRROR_HOST),
+                    f"builtin tool url not rewritten: {s['url']}",
+                )
+                self.assertNotIn("127.0.0.1", s["url"])
+
+    def test_builtin_object_urls_stay_on_origin(self):
+        relpaths = {
+            "tools/ctags-5.8-arduino11-pm-x86_64-pc-linux-gnu.tar.bz2",
+            "discovery/mdns-discovery/mdns-discovery_v1.1.0_Linux_64bit.tar.gz",
+            "monitor/serial-monitor/serial-monitor_v0.15.0_Windows_32bit.tar.gz",
+        }
+        for o in self.manifest["objects"]:
+            if o["relpath"] in relpaths:
+                self.assertTrue(o["url"].startswith(ORIGIN_HOST), o["url"])
+                self.assertNotIn(MIRROR_HOST, o["url"])
+
+    def test_builtin_objects_present(self):
+        relpaths = {o["relpath"] for o in self.manifest["objects"]}
+        # Latest versions only; the 1.0.10 / 0.14.1 archives must NOT appear.
+        self.assertIn("tools/ctags-5.8-arduino11-pm-x86_64-pc-linux-gnu.tar.bz2", relpaths)
+        self.assertIn("discovery/mdns-discovery/mdns-discovery_v1.1.0_Linux_64bit.tar.gz", relpaths)
+        self.assertIn("monitor/serial-monitor/serial-monitor_v0.15.0_Linux_64bit.tar.gz", relpaths)
+        self.assertNotIn(
+            "discovery/mdns-discovery/mdns-discovery_v1.0.10_Linux_64bit.tar.gz", relpaths
+        )
+        self.assertNotIn(
+            "monitor/serial-monitor/serial-monitor_v0.14.1_Linux_64bit.tar.gz", relpaths
+        )
+        for o in self.manifest["objects"]:
+            if o["relpath"].startswith(("discovery/", "monitor/")) or "ctags" in o["relpath"]:
+                self.assertIsNotNone(o.get("sha256"))
+                self.assertGreater(int(o.get("size", 0)), 0)
+
+    def test_builtin_extends_managed_top_level_dirs(self):
+        from arduino_mirror.core import top_level_dirs
+
+        dirs = top_level_dirs(self.manifest["objects"])
+        # builtin brings `discovery` and `monitor` alongside cores/tools.
+        self.assertIn("discovery", dirs)
+        self.assertIn("monitor", dirs)
+        self.assertIn("tools", dirs)
+        self.assertIn("cores", dirs)
+
+
 class TestCrossSchemeOriginMatching(unittest.TestCase):
     """The upstream index publishes mbed cores over http:// while everything
     else uses https:// on the same host. Origin matching must be scheme-agnostic
