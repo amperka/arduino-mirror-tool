@@ -27,7 +27,11 @@ def _env_list(name: str, default: str) -> list[str]:
     val = os.environ.get(name)
     if not val:
         val = default
-    return [p.strip() for p in val.split(",") if p.strip()]
+    return _split_csv(val)
+
+
+def _split_csv(s: str) -> list[str]:
+    return [p.strip() for p in s.split(",") if p.strip()]
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -50,11 +54,14 @@ def _common_args(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument(
         "--architectures",
-        default=_env_list("ARCHITECTURES", "avr"),
-        help="Comma-separated architectures to keep (default: avr).",
+        type=_split_csv,
+        default=_env_list("ARCHITECTURES", "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"),
+        help="Comma-separated architectures to keep "
+        "(default: avr,samd,sam,megaavr,mbed_nano,mbed_rp2040).",
     )
     p.add_argument(
         "--packages",
+        type=_split_csv,
         default=_env_list("PACKAGES", "arduino"),
         help="Comma-separated packager names to keep (default: arduino).",
     )

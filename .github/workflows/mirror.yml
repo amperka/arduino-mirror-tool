@@ -11,7 +11,7 @@ permissions:
 
 env:
   MIRROR_HOST: "https://arduino-downloads.amperka.ru"
-  ARCHITECTURES: "avr"
+  ARCHITECTURES: "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"
   PACKAGES: "arduino"
   LATEST_ONLY: "true"
   TARGET_KIND: "s3"

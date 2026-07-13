@@ -32,6 +32,76 @@
           "checksum": "SHA-256:deadbeef",
           "size": 7000000,
           "toolsDependencies": []
+        },
+        {
+          "name": "Arduino SAMD Boards (32-bits ARM Cortex-M0+)",
+          "architecture": "samd",
+          "version": "1.8.14",
+          "category": "Arduino",
+          "url": "http://127.0.0.1:18099/cores/staging/core-ArduinoCore-samd-1.8.14.tar.bz2",
+          "archiveFileName": "core-ArduinoCore-samd-1.8.14.tar.bz2",
+          "checksum": "SHA-256:bbb35d6edd6e57e13d29e7dcc9975fb605e180fc36b451b890d36820300a023b",
+          "size": 3061758,
+          "toolsDependencies": [
+            {"packager": "arduino", "name": "arm-none-eabi-gcc", "version": "7-2017q4"},
+            {"packager": "arduino", "name": "bossac", "version": "1.7.0-arduino3"}
+          ]
+        },
+        {
+          "name": "Arduino SAM Boards (32-bits ARM Cortex-M3)",
+          "architecture": "sam",
+          "version": "1.6.12",
+          "category": "Arduino",
+          "url": "http://127.0.0.1:18099/cores/sam-1.6.12.tar.bz2",
+          "archiveFileName": "sam-1.6.12.tar.bz2",
+          "checksum": "SHA-256:1d56d0ceea12a920c4a5c12fff793499354ffba7e93d330786bd2d6f3a191c47",
+          "size": 16496493,
+          "toolsDependencies": [
+            {"packager": "arduino", "name": "arm-none-eabi-gcc", "version": "4.8.3-2014q1"},
+            {"packager": "arduino", "name": "bossac", "version": "1.6.1-arduino"}
+          ]
+        },
+        {
+          "name": "Arduino megaAVR Boards",
+          "architecture": "megaavr",
+          "version": "1.8.8",
+          "category": "Arduino",
+          "url": "http://127.0.0.1:18099/cores/core-ArduinoCore-megaavr-1.8.8.tar.bz2",
+          "archiveFileName": "core-ArduinoCore-megaavr-1.8.8.tar.bz2",
+          "checksum": "SHA-256:4ffba95eef2c217dfadbe545a81c898a184e8dc0ad3a963f15ef4f627de608de",
+          "size": 868150,
+          "toolsDependencies": [
+            {"packager": "arduino", "name": "avr-gcc", "version": "7.3.0-atmel3.6.1-arduino5"},
+            {"packager": "arduino", "name": "avrdude", "version": "6.3.0-arduino17"}
+          ]
+        },
+        {
+          "name": "Arduino Mbed OS Nano Boards",
+          "architecture": "mbed_nano",
+          "version": "4.6.0",
+          "category": "Arduino",
+          "url": "http://127.0.0.1:18099/cores/staging/ArduinoCore-mbed-nano-4.6.0.tar.bz2",
+          "archiveFileName": "ArduinoCore-mbed-nano-4.6.0.tar.bz2",
+          "checksum": "SHA-256:40b6c4ea6b89e85b421705549925857f67f278b1bd3e0879b8d1201d86d68211",
+          "size": 7338749,
+          "toolsDependencies": [
+            {"packager": "arduino", "name": "arm-none-eabi-gcc", "version": "7-2017q4"},
+            {"packager": "arduino", "name": "rp2040tools", "version": "1.0.6"}
+          ]
+        },
+        {
+          "name": "Arduino Mbed OS RP2040 Boards",
+          "architecture": "mbed_rp2040",
+          "version": "4.6.0",
+          "category": "Arduino",
+          "url": "http://127.0.0.1:18099/cores/staging/ArduinoCore-mbed-RP2040-4.6.0.tar.bz2",
+          "archiveFileName": "ArduinoCore-mbed-RP2040-4.6.0.tar.bz2",
+          "checksum": "SHA-256:90af35c47963706add351b32957214f521b846471c6fe04737c6a59cd37dbc6e",
+          "size": 4786766,
+          "toolsDependencies": [
+            {"packager": "arduino", "name": "arm-none-eabi-gcc", "version": "7-2017q4"},
+            {"packager": "arduino", "name": "rp2040tools", "version": "1.0.6"}
+          ]
         }
       ],
       "tools": [
@@ -47,6 +117,17 @@
           ]
         },
         {
+          "name": "avrdude",
+          "version": "6.3.0-arduino17",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/avrdude_6.3.0-arduino17_x86_64-linux-gnu.tar.bz2",
+             "archiveFileName": "avrdude_6.3.0-arduino17_x86_64-linux-gnu.tar.bz2",
+             "checksum": "SHA-256:aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa7777bbbb8888",
+             "size": 234567}
+          ]
+        },
+        {
           "name": "avr-gcc",
           "version": "7.3.0-atmel3.6.1-arduino7",
           "systems": [
@@ -55,6 +136,72 @@
              "archiveFileName": "avr-gcc-7.3.0-atmel3.6.1-arduino7-x86_64-pc-linux-gnu.tar.bz2",
              "checksum": "SHA-256:836fe7ebfccf10bf231ed190fbe4bd0097817476136ed9a79bb9bb420a8037d9",
              "size": 654321}
+          ]
+        },
+        {
+          "name": "avr-gcc",
+          "version": "7.3.0-atmel3.6.1-arduino5",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-linux-gnu.tar.bz2",
+             "archiveFileName": "avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-linux-gnu.tar.bz2",
+             "checksum": "SHA-256:cccc1111dddd2222eeee3333ffff4444aaaa5555bbbb6666cccc7777dddd8888",
+             "size": 345678}
+          ]
+        },
+        {
+          "name": "arm-none-eabi-gcc",
+          "version": "7-2017q4",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/gcc-arm-none-eabi-7-2017-q4-major-linux64.tar.bz2",
+             "archiveFileName": "gcc-arm-none-eabi-7-2017-q4-major-linux64.tar.bz2",
+             "checksum": "SHA-256:eeee1111ffff2222aaaa3333bbbb4444cccc5555dddd6666eeee7777ffff8888",
+             "size": 456789}
+          ]
+        },
+        {
+          "name": "arm-none-eabi-gcc",
+          "version": "4.8.3-2014q1",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/gcc-arm-none-eabi-4.8.3-2014q1-linux64.tar.gz",
+             "archiveFileName": "gcc-arm-none-eabi-4.8.3-2014q1-linux64.tar.gz",
+             "checksum": "SHA-256:ffff1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777aaaa8888",
+             "size": 567890}
+          ]
+        },
+        {
+          "name": "bossac",
+          "version": "1.7.0-arduino3",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/bossac-1.7.0-arduino3-linux64.tar.gz",
+             "archiveFileName": "bossac-1.7.0-arduino3-linux64.tar.gz",
+             "checksum": "SHA-256:111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000",
+             "size": 678901}
+          ]
+        },
+        {
+          "name": "bossac",
+          "version": "1.6.1-arduino",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/bossac-1.6.1-arduino-linux64.tar.gz",
+             "archiveFileName": "bossac-1.6.1-arduino-linux64.tar.gz",
+             "checksum": "SHA-256:222233334444555566667777888899990000aaaabbbbccccddddeeeeffff0001",
+             "size": 789012}
+          ]
+        },
+        {
+          "name": "rp2040tools",
+          "version": "1.0.6",
+          "systems": [
+            {"host": "x86_64-pc-linux-gnu",
+             "url": "http://127.0.0.1:18099/tools/rp2040tools-1.0.6-linux64.tar.gz",
+             "archiveFileName": "rp2040tools-1.0.6-linux64.tar.gz",
+             "checksum": "SHA-256:33334444555566667777888899990000aaaabbbbccccddddeeeeffff00001111",
+             "size": 890123}
           ]
         }
       ]

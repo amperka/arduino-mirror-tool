@@ -9,12 +9,13 @@ Mirroring model -- two URL prefixes, period:
   * target_prefix (--mirror-host): what the published Boards Manager index
     advertises so clients fetch from us.
 
-An archive URL always STARTS WITH src_prefix. Mirroring = keep object URLs
-on the origin, rewrite the published index src -> target. No host parsing,
-no regex, no env re-reads, no module-level prefix default: the two prefixes
-come in once via CLI and are threaded through build_manifest as required
-arguments. There is no fallback to a hardcoded prefix -- a missing src_prefix
-is a caller bug, surfaced immediately, not silently defaulted.
+An archive URL always STARTS WITH src_prefix (or its scheme-alternate -- see
+`origin_prefixes`). Mirroring = keep object URLs on the origin, rewrite the
+published index src -> target. No host parsing, no regex, no env re-reads, no
+module-level prefix default: the two prefixes come in once via CLI and are
+threaded through build_manifest as required arguments. There is no fallback
+to a hardcoded prefix -- a missing src_prefix is a caller bug, surfaced
+immediately, not silently defaulted.
 """
 
 from __future__ import annotations
@@ -22,11 +23,36 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 
 def verkey(v: str):
     """Version-ish string -> comparable list (handles dots, dashes, plus)."""
     return [int(x) if x.isdigit() else x for x in re.split(r"[.\-+]", str(v))]
+
+
+def _origin_netloc(src_prefix: str) -> str:
+    """Host[:port] of the origin, scheme-agnostic (http == https here)."""
+    return urlsplit(src_prefix).netloc
+
+
+def _origin_prefix_path(src_prefix: str) -> str:
+    """Path component of src_prefix, trailing slash stripped (may be empty)."""
+    return urlsplit(src_prefix).path.rstrip("/")
+
+
+def _origin_string_forms(src_prefix: str) -> list[str]:
+    """Both http:// and https:// string forms of the origin, for bulk replace.
+
+    The upstream index is scheme-inconsistent: mbed cores are published as
+    http://downloads.arduino.cc/... while everything else uses https:// on the
+    same host. When rewriting the serialized index we must catch both forms.
+    """
+    netloc = _origin_netloc(src_prefix)
+    path = _origin_prefix_path(src_prefix)
+    if not netloc:
+        return [src_prefix]
+    return [f"http://{netloc}{path}", f"https://{netloc}{path}"]
 
 
 def parse_sha256(checksum: str | None) -> str | None:
@@ -37,27 +63,47 @@ def parse_sha256(checksum: str | None) -> str | None:
 
 
 def is_mirrorable(url: str | None, src_prefix: str) -> bool:
-    """True only for archives whose URL starts with the origin (src) prefix."""
-    return bool(url) and str(url).startswith(src_prefix)
+    """True only for archives whose URL is on the origin host (any scheme).
+
+    downloads.arduino.cc serves the same archives over http and https, and the
+    upstream index mixes both; we match on netloc, not on the scheme prefix.
+    """
+    if not url:
+        return False
+    u = urlsplit(str(url))
+    if u.netloc != _origin_netloc(src_prefix):
+        return False
+    prefix_path = _origin_prefix_path(src_prefix)
+    if not prefix_path:
+        return True
+    return u.path == prefix_path or u.path.startswith(prefix_path + "/")
 
 
 def rewrite_index_url(url: str, target_prefix: str, src_prefix: str) -> str:
     """Rewrite a single origin URL to the published mirror (target) prefix.
 
-    Only touches URLs that actually start with src_prefix (archive URLs). Other
-    URLs (help, website) pass through unchanged. Download *source* URLs in the
-    manifest objects must NOT be rewritten -- sync fetches them from src.
+    Only touches URLs on the origin host (archive URLs). Other URLs (help,
+    website) pass through unchanged. Download *source* URLs in the manifest
+    objects must NOT be rewritten -- sync fetches them from src.
     """
-    if not url or not url.startswith(src_prefix):
+    if not url or not is_mirrorable(url, src_prefix):
         return url
-    return target_prefix + url[len(src_prefix) :]
+    tp = urlsplit(target_prefix)
+    return urlunsplit(
+        (tp.scheme, tp.netloc, f"{tp.path.rstrip('/')}/{relpath_of(url, src_prefix)}", "", "")
+    )
 
 
 def relpath_of(url: str, src_prefix: str) -> str:
     """Path portion of an origin URL (S3 object key), with no leading slash."""
-    if not url.startswith(src_prefix):
+    u = urlsplit(url)
+    if u.netloc != _origin_netloc(src_prefix):
         raise ValueError(f"URL not on origin prefix, cannot mirror: {url}")
-    return url[len(src_prefix) :].lstrip("/")
+    path = u.path
+    prefix_path = _origin_prefix_path(src_prefix)
+    if prefix_path and (path == prefix_path or path.startswith(prefix_path + "/")):
+        path = path.removeprefix(prefix_path)
+    return path.lstrip("/")
 
 
 def fetch_json(source: str) -> dict:
@@ -114,7 +160,14 @@ def build_manifest(
         if not plats:
             continue
         if latest_only:
-            plats = [max(plats, key=lambda p: verkey(p.get("version", "0")))]
+            # Keep the latest version PER ARCHITECTURE, not across all arches.
+            by_arch: dict[str, dict] = {}
+            for p in plats:
+                a = p.get("architecture", "")
+                cur = by_arch.get(a)
+                if cur is None or verkey(p.get("version", "0")) > verkey(cur.get("version", "0")):
+                    by_arch[a] = p
+            plats = list(by_arch.values())
         meta = kept_pkgs.setdefault(pkg["name"], pkg_skeleton(pkg))
         for p in plats:
             meta["platforms"].append(p)
@@ -161,10 +214,13 @@ def build_manifest(
 
     # Rewrite the published index: every origin (src) URL -> mirror (target).
     # Object download URLs live in `objects` above and are intentionally left
-    # on the origin so sync pulls from upstream.
+    # on the origin so sync pulls from upstream. Both scheme variants of
+    # src_prefix are replaced (mbed cores are published as http://, the rest
+    # as https:// on the same host).
     out_index = {"packages": list(kept_pkgs.values())}
     raw = json.dumps(out_index, indent=2, ensure_ascii=False)
-    raw = raw.replace(src_prefix, mirror_host)
+    for form in _origin_string_forms(src_prefix):
+        raw = raw.replace(form, mirror_host)
     out_index = json.loads(raw)
     out_index["packages"] = [
         p for p in out_index["packages"] if p.get("platforms") or p.get("tools")

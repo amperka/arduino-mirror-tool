@@ -1,9 +1,11 @@
 # arduino-mirror
 
 Static, filtered mirror of Arduino Boards Manager packages for networks where
-`downloads.arduino.cc` is unreachable. Mirrors `arduino:avr` (latest) by default
-and republishes the Boards Manager index with archive URLs rewritten to a mirror
-host. Sync runs weekly (GitHub Actions) or on manual dispatch.
+`downloads.arduino.cc` is unreachable. Mirrors the `arduino` package (latest
+versions) across avr, samd, sam, megaavr, mbed_nano, and mbed_rp2040
+architectures by default, and republishes the Boards Manager index with
+archive URLs rewritten to a mirror host. Sync runs weekly (GitHub Actions) or
+on manual dispatch.
 
 ## For end users (no VPN)
 
@@ -13,7 +15,9 @@ In Arduino IDE 2.x: **File → Preferences → Additional Boards Manager URLs**,
 https://arduino-downloads.amperka.ru/package_index.json
 ```
 
-Install boards normally; the mirror overrides the official `arduino:avr` entry.
+Install boards normally; the mirror overrides the official `arduino:*` entries
+for the supported architectures (avr, samd, sam, megaavr, mbed_nano,
+mbed_rp2040).
 
 > The mirror index has no Arduino `.sig` signature, so the IDE logs a benign
 > "untrusted" warning. Installation is unaffected.
@@ -92,9 +96,11 @@ The bucket must allow **public read** (anonymous GET). `S3Target` also applies a
 
 ## Notes / gotchas
 
-- **Size:** `arduino:avr` latest ≈ 270 MB (mostly `avr-gcc`, ~237 MB) across 3
-  toolchains / 6 OS flavours. Widen `ARCHITECTURES`/`PACKAGES` only if you accept
-  the bandwidth + storage cost.
+- **Size:** the mirror covers six architectures (avr, samd, sam, megaavr,
+  mbed_nano, mbed_rp2040) with all their toolchain dependencies. avr alone is
+  ~270 MB (mostly `avr-gcc`); adding ARM-based cores (samd, sam, mbed_*) pulls
+  in `arm-none-eabi-gcc`, `bossac`, `openocd`, `rp2040tools`, etc. Widen
+  `ARCHITECTURES`/`PACKAGES` only if you accept the bandwidth + storage cost.
 - **Stale cleanup is directory-scoped.** Only keys under the top-level dirs the
   mirror writes (`cores/`, `tools/`) are ever deleted; root files and unrelated
   subdirectories are left untouched.
