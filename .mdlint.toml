@@ -1,0 +1,11 @@
+exclude = [
+  "openspec",
+  "CHANGELOG.md",
+]
+
+[rules.MD013]
+code_blocks = false
+tables = false
+
+[rules.MD033]
+allowed_elements = ["rule"]

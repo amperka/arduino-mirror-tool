@@ -69,8 +69,8 @@ log_cli_format = "[%(name)s][%(funcName)s]:%(lineno)s %(message)s"
 log_format = "[%(name)s][%(funcName)s]:%(lineno)s %(message)s"
 markers = [
   "unit: unit tests (no external services)",
-  "integration: integration tests (with testcontainers)",
-  "e2e: end-to-end tests (with testcontainers)",
+  "integration: integration tests",
+  "e2e: end-to-end tests",
 ]
 testpaths = ["tests/unit", "tests/integration", "tests/e2e"]
 asyncio_mode = "auto"
