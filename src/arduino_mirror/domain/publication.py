@@ -26,6 +26,15 @@ class IndexFamily(StrEnum):
     PACKAGES = "packages"
     LIBRARIES = "libraries"
 
+    # region METHOD_archive_prefix
+    # PURPOSE: Map the operator-facing family name to its stable short archive namespace.
+    @property
+    def archive_prefix(self) -> str:
+        """Return this family's source-path-independent archive namespace."""
+        return "p" if self is IndexFamily.PACKAGES else "l"
+
+    # endregion METHOD_archive_prefix
+
 
 # endregion CLASS_IndexFamily
 

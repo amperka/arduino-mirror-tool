@@ -30,7 +30,7 @@ def archive_key_and_url(
     relative = origin_relative_path(url, origin_host)
     if relative is None:
         return None
-    key = f"{family}/{relative}"
+    key = f"{family.archive_prefix}/{relative}"
     target = urlsplit(mirror_host)
     rewritten = urlunsplit(
         (target.scheme, target.netloc, f"{target.path.rstrip('/')}/{key}", "", "")

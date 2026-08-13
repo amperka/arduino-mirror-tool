@@ -103,7 +103,7 @@ def test_packages_fixture_selects_latest_rewrites_and_deduplicates() -> None:
     """Selected package archives are unique and published index URLs use the mirror host."""
     plan, target = run_fixture_flow(
         make_config(IndexFamily.PACKAGES),
-        present_keys=("packages/obsolete.tar.bz2", "libraries/protected.zip"),
+        present_keys=("p/obsolete.tar.bz2", "l/protected.zip"),
     )
 
     assert plan.releases == (
@@ -115,11 +115,11 @@ def test_packages_fixture_selects_latest_rewrites_and_deduplicates() -> None:
         "arduino:samd@1.8.14",
     )
     assert len(plan.archive_keys) == len(set(plan.archive_keys))
-    assert "packages/cores/staging/avr-1.8.8.tar.bz2" in plan.archive_keys
+    assert "p/cores/staging/avr-1.8.8.tar.bz2" in plan.archive_keys
     avr_archive = next(
         archive
         for archive in plan.archives
-        if archive.key == "packages/cores/staging/avr-1.8.8.tar.bz2"
+        if archive.key == "p/cores/staging/avr-1.8.8.tar.bz2"
     )
     assert avr_archive.source_url.endswith("/cores/staging/avr-1.8.8.tar.bz2")
     assert (
@@ -127,11 +127,9 @@ def test_packages_fixture_selects_latest_rewrites_and_deduplicates() -> None:
         == "c816b6e9326cebe7721514288deeaf315affdef42049beb3f6cbbc4b7920304a"
     )
     assert avr_archive.size == _AVR_ARCHIVE_SIZE
-    assert plan.stale_keys == ("packages/obsolete.tar.bz2",)
+    assert plan.stale_keys == ("p/obsolete.tar.bz2",)
     package = plan.index["packages"][0]
-    assert package["platforms"][0]["url"].startswith(
-        "https://mirror.test.invalid/packages/"
-    )
+    assert package["platforms"][0]["url"].startswith("https://mirror.test.invalid/p/")
     assert target.operations == [
         "packages:list",
         "packages:archives",
@@ -149,20 +147,20 @@ def test_libraries_fixture_selects_latest_and_preserves_fields() -> None:
     """Libraries select stable latest releases and rewrite only their archive URLs."""
     plan, target = run_fixture_flow(
         make_config(IndexFamily.LIBRARIES),
-        present_keys=("libraries/Servo-1.2.zip", "packages/protected.tar.bz2"),
+        present_keys=("l/Servo-1.2.zip", "p/protected.tar.bz2"),
     )
 
     assert plan.releases == ("Servo@1.2.2", "WiFiNINA@1.8.13")
     assert plan.archive_keys == (
-        "libraries/libraries/Servo-1.2.2.zip",
-        "libraries/libraries/WiFiNINA-1.8.13.zip",
+        "l/libraries/Servo-1.2.2.zip",
+        "l/libraries/WiFiNINA-1.8.13.zip",
     )
-    assert plan.stale_keys == ("libraries/Servo-1.2.zip",)
+    assert plan.stale_keys == ("l/Servo-1.2.zip",)
     libraries = {library["name"]: library for library in plan.index["libraries"]}
     assert libraries["Servo"]["customField"] == {"preserved": True}
     assert (
         libraries["Servo"]["url"]
-        == "https://mirror.test.invalid/libraries/libraries/Servo-1.2.2.zip"
+        == "https://mirror.test.invalid/l/libraries/Servo-1.2.2.zip"
     )
     assert target.operations == [
         "libraries:list",
@@ -238,15 +236,15 @@ def test_external_releases_bypass_origin_latest_selection_and_rewrite() -> None:
     ]
     library_urls = [library["url"] for library in libraries.index["libraries"]]
     assert package_urls == [
-        "https://mirror.test.invalid/packages/cores/avr-1.1.tar.bz2",
+        "https://mirror.test.invalid/p/cores/avr-1.1.tar.bz2",
         external_url,
     ]
     assert library_urls == [
-        "https://mirror.test.invalid/libraries/Example-1.1.zip",
+        "https://mirror.test.invalid/l/Example-1.1.zip",
         external_url,
     ]
-    assert packages.archive_keys == ("packages/cores/avr-1.1.tar.bz2",)
-    assert libraries.archive_keys == ("libraries/Example-1.1.zip",)
+    assert packages.archive_keys == ("p/cores/avr-1.1.tar.bz2",)
+    assert libraries.archive_keys == ("l/Example-1.1.zip",)
 
 
 # endregion FUNC_test_external_releases_bypass_origin_latest_selection_and_rewrite
@@ -257,7 +255,7 @@ def test_external_releases_bypass_origin_latest_selection_and_rewrite() -> None:
 def test_dry_run_builds_plan_without_target_interaction() -> None:
     """Dry run creates a package plan and leaves its recording target unused."""
     config = make_config(IndexFamily.PACKAGES, dry_run=True)
-    plan, target = run_fixture_flow(config, present_keys=("packages/stale.tar.bz2",))
+    plan, target = run_fixture_flow(config, present_keys=("p/stale.tar.bz2",))
 
     assert plan.archive_keys
     assert plan.stale_keys == ()
@@ -271,7 +269,7 @@ def test_dry_run_builds_plan_without_target_interaction() -> None:
 # PURPOSE: Verify a plan without origin archives cannot replace a visible index or remove family-owned archives.
 def test_empty_origin_selection_preserves_target_state() -> None:
     """An external-only library index returns its plan without target interaction."""
-    target = RecordingPublicationTarget(present_keys=("libraries/obsolete.zip",))
+    target = RecordingPublicationTarget(present_keys=("l/obsolete.zip",))
     use_case = PublishFamily(
         source=FixtureIndexSource(
             family=IndexFamily.LIBRARIES,
@@ -309,8 +307,8 @@ def test_configuration_cli_precedence_and_family_inputs() -> None:
     """Configuration applies the committed CLI/environment/default contract."""
     environment = {
         "MIRROR_HOST": "https://environment.invalid",
-        "PACKAGES_INPUT_INDEX": "packages-environment.json",
-        "LIBRARIES_INPUT_INDEX": "libraries-environment.json",
+        "PACKAGES_INPUT_INDEX": "https://environment.invalid/custom/packages-index.json",
+        "LIBRARIES_INPUT_INDEX": "https://environment.invalid/custom/libraries-index.json",
         "ARCHITECTURES": "sam",
         "PACKAGES": "builtin",
         "DRY_RUN": "true",
@@ -327,16 +325,52 @@ def test_configuration_cli_precedence_and_family_inputs() -> None:
     )
 
     assert packages.mirror_host == "https://cli.invalid"
-    assert packages.input_index == "packages-environment.json"
+    assert (
+        packages.input_index == "https://environment.invalid/custom/packages-index.json"
+    )
+    assert packages.index_key == "p/custom/packages-index.json"
     assert packages.architectures == ("sam",)
     assert packages.package_names == ("builtin",)
     assert packages.dry_run is False
     assert packages.target is TargetKind.S3
-    assert libraries.input_index == "libraries-environment.json"
+    assert (
+        libraries.input_index
+        == "https://environment.invalid/custom/libraries-index.json"
+    )
+    assert libraries.index_key == "l/custom/libraries-index.json"
     assert libraries.dry_run is True
+    assert (
+        Config.from_values(
+            family=IndexFamily.PACKAGES, values={"target": "local"}, environment={}
+        ).index_key
+        == "p/packages/package_index.json"
+    )
+    assert (
+        Config.from_values(
+            family=IndexFamily.LIBRARIES, values={"target": "local"}, environment={}
+        ).index_key
+        == "l/libraries/library_index.json"
+    )
 
 
 # endregion FUNC_test_configuration_cli_precedence_and_family_inputs
+
+
+# region FUNC_test_configuration_rejects_relative_input_index
+# PURPOSE: Reject an input index that cannot supply a mirrorable target path.
+def test_configuration_rejects_relative_input_index() -> None:
+    """A relative input URL cannot determine a safe target index key."""
+    config = Config.from_values(
+        family=IndexFamily.PACKAGES,
+        values={"input_index": "package_index.json", "target": "local"},
+        environment={},
+    )
+
+    with pytest.raises(ValueError, match="non-empty absolute URL path"):
+        config.validate()
+
+
+# endregion FUNC_test_configuration_rejects_relative_input_index
 
 
 # region FUNC_test_configuration_rejects_incomplete_s3_settings

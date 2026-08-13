@@ -19,21 +19,14 @@ from pathlib import Path
 from shutil import copyfileobj
 from typing import TYPE_CHECKING, Any
 
-from arduino_mirror.domain import IndexFamily, PublicationPlan
-
 from .archive_tempfile import download_verified, is_file_verified
 
 if TYPE_CHECKING:
-    from arduino_mirror.domain import PublicationCancellation
+    from arduino_mirror.domain import PublicationCancellation, PublicationPlan
 
 __all__ = ["LocalPublicationTarget"]
 
 logger = logging.getLogger(__name__)
-
-_INDEX_NAMES = {
-    IndexFamily.PACKAGES: "package_index.json",
-    IndexFamily.LIBRARIES: "library_index.json",
-}
 
 
 # region CLASS_LocalPublicationTarget
@@ -43,6 +36,7 @@ class LocalPublicationTarget:
     """Map logical target keys to a local directory tree."""
 
     root: Path
+    index_key: str
     prefix: str = ""
     timeout_seconds: float = 600.0
 
@@ -50,12 +44,15 @@ class LocalPublicationTarget:
     # PURPOSE: Build stale and pending archive work from one family directory scan before publication mutates the target.
     def reconcile(self, plan: PublicationPlan) -> PublicationPlan:
         """Return a plan reconciled with one scan of its local family directory."""
-        directory = self._path(plan.family.value)
+        archive_prefix = plan.family.archive_prefix
+        directory = self._path(archive_prefix)
         present = (
             {
-                f"{plan.family}/{file.relative_to(directory).as_posix()}": file
+                f"{archive_prefix}/{file.relative_to(directory).as_posix()}": file
                 for file in directory.rglob("*")
                 if file.is_file()
+                and f"{archive_prefix}/{file.relative_to(directory).as_posix()}"
+                != self.index_key
             }
             if directory.exists()
             else {}
@@ -113,13 +110,13 @@ class LocalPublicationTarget:
     ) -> None:
         """Atomically write the selected family's transformed index."""
         cancellation.check()
-        destination = self._path(_INDEX_NAMES[plan.family])
+        destination = self._path(self.index_key)
         destination.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write_json(destination, plan.index, cancellation=cancellation)
-        logger.info("Published %s", _INDEX_NAMES[plan.family])
+        logger.info("Published %s", self.index_key)
         logger.debug(
             "TARGET_INDEX_REPLACED",
-            extra={"family": plan.family, "index_key": _INDEX_NAMES[plan.family]},
+            extra={"family": plan.family, "index_key": self.index_key},
         )
 
     # endregion METHOD_replace_index

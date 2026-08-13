@@ -60,7 +60,8 @@ def test_libraries_cli_publishes_verified_archive_and_index(
     target = tmp_path / "target"
 
     with _http_root(source) as origin:
-        (source / "library_index.json").write_text(
+        (source / "libraries").mkdir()
+        (source / "libraries" / "library_index.json").write_text(
             json.dumps(
                 {
                     "libraries": [
@@ -82,7 +83,7 @@ def test_libraries_cli_publishes_verified_archive_and_index(
                 "--log-level",
                 "DEBUG",
                 "--input",
-                f"{origin}/library_index.json",
+                f"{origin}/libraries/library_index.json",
                 "--mirror-host",
                 "https://mirror.test.invalid",
                 "--target",
@@ -97,12 +98,11 @@ def test_libraries_cli_publishes_verified_archive_and_index(
         capsys.readouterr().out
         == "libraries: published 1 release(s), 1 archive(s), 0 stale\n"
     )
-    assert (target / "libraries" / "Servo.zip").read_bytes() == archive_bytes
-    published = json.loads((target / "library_index.json").read_text(encoding="utf-8"))
-    assert (
-        published["libraries"][0]["url"]
-        == "https://mirror.test.invalid/libraries/Servo.zip"
+    assert (target / "l" / "Servo.zip").read_bytes() == archive_bytes
+    published = json.loads(
+        (target / "l" / "libraries" / "library_index.json").read_text(encoding="utf-8")
     )
+    assert published["libraries"][0]["url"] == "https://mirror.test.invalid/l/Servo.zip"
     assert [
         record.getMessage() for record in log_records if record.levelno == logging.DEBUG
     ] == [
@@ -189,9 +189,9 @@ def test_libraries_cli_reports_progress_without_debug(
     for progress in (
         "Fetching libraries index",
         "Selected 1 libraries release(s), 1 archive(s)",
-        "Downloading libraries/Servo.zip",
-        "Published libraries/Servo.zip",
-        "Published library_index.json",
+        "Downloading l/Servo.zip",
+        "Published l/Servo.zip",
+        "Published l/library_index.json",
     ):
         assert progress in captured.err
     assert [record.getMessage() for record in log_records] == [
@@ -199,10 +199,10 @@ def test_libraries_cli_reports_progress_without_debug(
         "Fetched libraries index",
         "Selected 1 libraries release(s), 1 archive(s)",
         "Found 0 stale libraries archive(s)",
-        "Downloading libraries/Servo.zip",
-        "Verified libraries/Servo.zip (16 bytes)",
-        "Published libraries/Servo.zip",
-        "Published library_index.json",
+        "Downloading l/Servo.zip",
+        "Verified l/Servo.zip (16 bytes)",
+        "Published l/Servo.zip",
+        "Published l/library_index.json",
     ]
 
 
@@ -218,7 +218,7 @@ def test_libraries_cli_returns_signal_after_final_cleanup(
     source = tmp_path / "source"
     source.mkdir()
     target = tmp_path / "target"
-    stale = target / "libraries" / "obsolete.zip"
+    stale = target / "l" / "obsolete.zip"
     stale.parent.mkdir(parents=True)
     stale.write_bytes(b"old")
     archive_bytes = b"final cleanup cancellation"

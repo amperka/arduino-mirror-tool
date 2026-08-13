@@ -56,8 +56,11 @@ class FakeMinio:
         self.keyword_arguments = kwargs
         self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
         self.objects = [
-            SimpleNamespace(object_name="managed/libraries/obsolete.zip", size=3),
-            SimpleNamespace(object_name="managed/packages/protected.tar.bz2", size=9),
+            SimpleNamespace(object_name="managed/l/obsolete.zip", size=3),
+            SimpleNamespace(
+                object_name="managed/l/libraries/library_index.json", size=9
+            ),
+            SimpleNamespace(object_name="managed/p/protected.tar.bz2", size=9),
         ]
         type(self).instances.append(self)
 
@@ -107,6 +110,7 @@ def test_s3_target_uses_only_family_owned_keys(
         endpoint="http://s3.test.invalid",
         access_key="access",
         secret_key="secret",
+        index_key="l/libraries/library_index.json",
         prefix="managed",
     )
     plan = PublicationPlan(
@@ -114,16 +118,16 @@ def test_s3_target_uses_only_family_owned_keys(
         releases=("Servo@1.0.0",),
         archives=(
             Archive(
-                key="libraries/Servo-1.0.0.zip",
+                key="l/Servo-1.0.0.zip",
                 source_url="https://origin.test.invalid/Servo-1.0.0.zip",
             ),
         ),
         index={"libraries": []},
-        stale_keys=("libraries/obsolete.zip",),
+        stale_keys=("l/obsolete.zip",),
     )
 
     reconciled = target.reconcile(plan)
-    assert reconciled.stale_keys == ("libraries/obsolete.zip",)
+    assert reconciled.stale_keys == ("l/obsolete.zip",)
     target.publish_archives(reconciled, cancellation=_NO_CANCELLATION)
     target.replace_index(reconciled, cancellation=_NO_CANCELLATION)
     target.cleanup_stale(reconciled, cancellation=_NO_CANCELLATION)
@@ -134,18 +138,21 @@ def test_s3_target_uses_only_family_owned_keys(
     assert client.calls[0] == (
         "list_objects",
         ("mirror",),
-        {"prefix": "managed/libraries/", "recursive": True},
+        {"prefix": "managed/l/", "recursive": True},
     )
     assert client.calls[1] == (
         "put_object",
-        ("mirror", "managed/libraries/Servo-1.0.0.zip", ANY),
+        ("mirror", "managed/l/Servo-1.0.0.zip", ANY),
         {"length": len(b"archive")},
     )
     assert client.calls[2][0] == "put_object"
-    assert client.calls[2][1][0:2] == ("mirror", "managed/library_index.json")
+    assert client.calls[2][1][0:2] == (
+        "mirror",
+        "managed/l/libraries/library_index.json",
+    )
     assert client.calls[3] == (
         "remove_object",
-        ("mirror", "managed/libraries/obsolete.zip"),
+        ("mirror", "managed/l/obsolete.zip"),
         {},
     )
     trace_records = [
@@ -160,7 +167,10 @@ def test_s3_target_uses_only_family_owned_keys(
     assert [extra_fields(record) for record in trace_records] == [
         {"archive_count": 1, "family": IndexFamily.LIBRARIES},
         {"archive_count": 1, "family": IndexFamily.LIBRARIES},
-        {"family": IndexFamily.LIBRARIES, "index_key": "library_index.json"},
+        {
+            "family": IndexFamily.LIBRARIES,
+            "index_key": "l/libraries/library_index.json",
+        },
         {"family": IndexFamily.LIBRARIES, "stale_count": 1},
     ]
 
@@ -182,24 +192,25 @@ def test_s3_target_skips_archives_confirmed_by_one_listing(monkeypatch) -> None:
         bucket="mirror",
         access_key="access",
         secret_key="secret",
+        index_key="l/libraries/library_index.json",
         prefix="managed",
     )
     client = FakeMinio.instances[0]
     client.objects = [
-        SimpleNamespace(object_name="managed/libraries/size.zip", size=4),
-        SimpleNamespace(object_name="managed/libraries/other.zip", size=1),
+        SimpleNamespace(object_name="managed/l/size.zip", size=4),
+        SimpleNamespace(object_name="managed/l/other.zip", size=1),
     ]
     plan = PublicationPlan(
         family=IndexFamily.LIBRARIES,
         releases=("Size@1.0.0", "Other@1.0.0"),
         archives=(
             Archive(
-                key="libraries/size.zip",
+                key="l/size.zip",
                 source_url="https://origin.test.invalid/size.zip",
                 size=4,
             ),
             Archive(
-                key="libraries/other.zip",
+                key="l/other.zip",
                 source_url="https://origin.test.invalid/other.zip",
                 size=1,
             ),
@@ -249,6 +260,7 @@ def test_s3_target_retries_transient_put_then_succeeds(monkeypatch) -> None:
         bucket="mirror",
         access_key="access",
         secret_key="secret",
+        index_key="l/libraries/library_index.json",
         prefix="managed",
         retry_policy=RetryPolicy(max_attempts=5, base_delay=0),
     )
@@ -257,7 +269,7 @@ def test_s3_target_retries_transient_put_then_succeeds(monkeypatch) -> None:
         releases=("Servo@1.0.0",),
         archives=(
             Archive(
-                key="libraries/Servo-1.0.0.zip",
+                key="l/Servo-1.0.0.zip",
                 source_url="https://origin.test.invalid/Servo-1.0.0.zip",
             ),
         ),

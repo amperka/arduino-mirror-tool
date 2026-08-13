@@ -51,6 +51,7 @@ def make_publication_use_case(config: Config) -> PublishFamily:
         case TargetKind.LOCAL:
             target = LocalPublicationTarget(
                 root=config.local_root,
+                index_key=config.index_key,
                 prefix=config.prefix,
             )
         case TargetKind.S3:
@@ -60,6 +61,7 @@ def make_publication_use_case(config: Config) -> PublishFamily:
                 access_key=config.access_key,
                 secret_key=config.secret_key,
                 region=config.region,
+                index_key=config.index_key,
                 prefix=config.prefix,
                 retry_policy=retry_policy,
             )

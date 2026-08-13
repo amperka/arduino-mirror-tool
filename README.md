@@ -6,8 +6,9 @@ latest selected releases, rewrites configured-origin archive URLs to a mirror
 host, verifies downloaded archive bytes, and publishes independently to an
 S3-compatible bucket or a local directory.
 
-Package archives belong to `packages/` and library archives to `libraries/`.
-The published root indexes are `package_index.json` and `library_index.json`.
+Package archives belong to `p/` and library archives to `l/`; the complete
+origin-relative path follows that stable namespace.  Indexes follow the same
+rule: `p/packages/package_index.json` and `l/libraries/library_index.json`.
 
 ## For end users
 
@@ -15,7 +16,7 @@ Arduino IDE 2.x users add the package index to **File → Preferences →
 Additional Boards Manager URLs**:
 
 ```text
-https://arduino-downloads.amperka.ru/package_index.json
+https://arduino-downloads.amperka.ru/p/packages/package_index.json
 ```
 
 Install boards normally; the mirror overrides the official `arduino:*` entries
@@ -47,7 +48,7 @@ arduino-mirror libraries \
 
 # Exercise one publication pipeline without S3 credentials.
 arduino-mirror libraries \
-  --input http://127.0.0.1:8080/library_index.json \
+  --input http://127.0.0.1:8080/libraries/library_index.json \
   --target local \
   --local-root ./mirror-out
 

@@ -18,23 +18,16 @@ from urllib.parse import urlsplit
 
 from minio import Minio
 
-from arduino_mirror.domain import Archive, IndexFamily, PublicationPlan
-
 from .archive_tempfile import VerifiedArchive, download_verified
 from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_s3, retry_call
 
 if TYPE_CHECKING:
-    from arduino_mirror.domain import PublicationCancellation
+    from arduino_mirror.domain import Archive, PublicationCancellation, PublicationPlan
 
 
 __all__ = ["S3PublicationTarget"]
 
 logger = logging.getLogger(__name__)
-
-_INDEX_NAMES = {
-    IndexFamily.PACKAGES: "package_index.json",
-    IndexFamily.LIBRARIES: "library_index.json",
-}
 
 
 # region CLASS_S3PublicationTarget
@@ -50,6 +43,7 @@ class S3PublicationTarget:
         access_key: str,
         secret_key: str,
         region: str = "",
+        index_key: str,
         prefix: str = "",
         timeout_seconds: float = 600.0,
         retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
@@ -57,6 +51,7 @@ class S3PublicationTarget:
         """Create one S3-compatible target from resolved composition settings."""
         host, secure = _minio_endpoint(endpoint)
         self._bucket = bucket
+        self._index_key = index_key
         self._prefix = prefix.strip("/")
         self._timeout_seconds = timeout_seconds
         self._retry_policy = retry_policy
@@ -72,8 +67,8 @@ class S3PublicationTarget:
     # PURPOSE: Build stale and pending archive work from one S3 family listing before publication mutates the target.
     def reconcile(self, plan: PublicationPlan) -> PublicationPlan:
         """Return a plan reconciled with one S3 family listing."""
-        prefix = self._object_key(plan.family.value) + "/"
-        logical_prefix = f"{plan.family}/"
+        logical_prefix = f"{plan.family.archive_prefix}/"
+        prefix = self._object_key(logical_prefix)
         listed = retry_call(
             lambda: self._client.list_objects(
                 self._bucket,
@@ -84,9 +79,11 @@ class S3PublicationTarget:
             policy=self._retry_policy,
         )
         present = {
-            logical_prefix + name.removeprefix(prefix): item
+            key: item
             for item in listed
-            if isinstance(name := item.object_name, str) and name.startswith(prefix)
+            if isinstance(name := item.object_name, str)
+            and name.startswith(prefix)
+            and (key := logical_prefix + name.removeprefix(prefix)) != self._index_key
         }
         stale_keys = tuple(sorted(set(present) - set(plan.archive_keys)))
         archives_to_publish = tuple(
@@ -151,10 +148,10 @@ class S3PublicationTarget:
             policy=self._retry_policy,
             cancellation=cancellation,
         )
-        logger.info("Published %s", _INDEX_NAMES[plan.family])
+        logger.info("Published %s", self._index_key)
         logger.debug(
             "TARGET_INDEX_REPLACED",
-            extra={"family": plan.family, "index_key": _INDEX_NAMES[plan.family]},
+            extra={"family": plan.family, "index_key": self._index_key},
         )
 
     # endregion METHOD_replace_index
@@ -202,7 +199,7 @@ class S3PublicationTarget:
         body = json.dumps(plan.index, ensure_ascii=False, indent=2).encode("utf-8")
         self._client.put_object(
             self._bucket,
-            self._object_key(_INDEX_NAMES[plan.family]),
+            self._object_key(self._index_key),
             io.BytesIO(body),
             length=len(body),
             content_type="application/json",

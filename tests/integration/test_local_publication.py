@@ -75,13 +75,17 @@ def test_local_publication_flow_verifies_archives_replaces_index_and_cleans_own_
     (source / "Servo-1.0.0.zip").write_bytes(archive_bytes)
     checksum = hashlib.sha256(archive_bytes).hexdigest()
     target = tmp_path / "target"
-    (target / "libraries").mkdir(parents=True)
-    (target / "libraries" / "obsolete.zip").write_bytes(b"old")
-    (target / "packages").mkdir()
-    (target / "packages" / "protected.tar.bz2").write_bytes(b"package")
+    (target / "l" / "libraries").mkdir(parents=True)
+    (target / "l" / "obsolete.zip").write_bytes(b"old")
+    (target / "l" / "libraries" / "library_index.json").write_text(
+        '{"state": "old"}', encoding="utf-8"
+    )
+    (target / "p").mkdir()
+    (target / "p" / "protected.tar.bz2").write_bytes(b"package")
 
     with _http_root(source) as origin:
-        (source / "library_index.json").write_text(
+        (source / "libraries").mkdir()
+        (source / "libraries" / "library_index.json").write_text(
             json.dumps(
                 {
                     "libraries": [
@@ -97,16 +101,19 @@ def test_local_publication_flow_verifies_archives_replaces_index_and_cleans_own_
             ),
             encoding="utf-8",
         )
-        plan = run_publication(_config(f"{origin}/library_index.json", target))
+        plan = run_publication(
+            _config(f"{origin}/libraries/library_index.json", target)
+        )
 
-    assert plan.archive_keys == ("libraries/Servo-1.0.0.zip",)
-    assert (target / "libraries" / "Servo-1.0.0.zip").read_bytes() == archive_bytes
-    assert not (target / "libraries" / "obsolete.zip").exists()
-    assert (target / "packages" / "protected.tar.bz2").read_bytes() == b"package"
-    index = json.loads((target / "library_index.json").read_text(encoding="utf-8"))
+    assert plan.archive_keys == ("l/Servo-1.0.0.zip",)
+    assert (target / "l" / "Servo-1.0.0.zip").read_bytes() == archive_bytes
+    assert not (target / "l" / "obsolete.zip").exists()
+    assert (target / "p" / "protected.tar.bz2").read_bytes() == b"package"
+    index = json.loads(
+        (target / "l" / "libraries" / "library_index.json").read_text(encoding="utf-8")
+    )
     assert (
-        index["libraries"][0]["url"]
-        == "https://mirror.test.invalid/libraries/Servo-1.0.0.zip"
+        index["libraries"][0]["url"] == "https://mirror.test.invalid/l/Servo-1.0.0.zip"
     )
     trace_records = [
         record for record in caplog.records if record.levelno == logging.DEBUG
@@ -147,17 +154,20 @@ def test_local_publication_flow_verifies_archives_replaces_index_and_cleans_own_
             "to_publish_count": 1,
         },
         {
-            "archive_key": "libraries/Servo-1.0.0.zip",
+            "archive_key": "l/Servo-1.0.0.zip",
             "family": IndexFamily.LIBRARIES,
         },
         {
-            "archive_key": "libraries/Servo-1.0.0.zip",
+            "archive_key": "l/Servo-1.0.0.zip",
             "family": IndexFamily.LIBRARIES,
             "size": len(archive_bytes),
         },
         {"archive_count": 1, "family": IndexFamily.LIBRARIES},
         {"archive_count": 1, "family": IndexFamily.LIBRARIES},
-        {"family": IndexFamily.LIBRARIES, "index_key": "library_index.json"},
+        {
+            "family": IndexFamily.LIBRARIES,
+            "index_key": "l/libraries/library_index.json",
+        },
         {"family": IndexFamily.LIBRARIES},
         {"family": IndexFamily.LIBRARIES, "stale_count": 1},
         {"family": IndexFamily.LIBRARIES, "stale_count": 1},
@@ -178,7 +188,7 @@ def test_local_publication_skips_matching_archive(
     source.mkdir()
     archive_bytes = b"existing library release"
     target = tmp_path / "target"
-    existing = target / "libraries" / "Existing-1.0.0.zip"
+    existing = target / "l" / "Existing-1.0.0.zip"
     existing.parent.mkdir(parents=True)
     existing.write_bytes(archive_bytes)
 
@@ -205,7 +215,7 @@ def test_local_publication_skips_matching_archive(
         run_publication(_config(f"{origin}/library_index.json", target))
 
     assert existing.read_bytes() == archive_bytes
-    assert (target / "library_index.json").is_file()
+    assert (target / "l" / "library_index.json").is_file()
 
 
 # endregion FUNC_test_local_publication_skips_matching_archive
@@ -242,14 +252,14 @@ def test_invalid_archive_does_not_replace_index(
         with pytest.raises(ArchiveVerificationError, match="size mismatch"):
             run_publication(_config(f"{origin}/library_index.json", target))
 
-    assert not (target / "libraries" / "broken.zip").exists()
-    assert not (target / "library_index.json").exists()
+    assert not (target / "l" / "broken.zip").exists()
+    assert not (target / "l" / "library_index.json").exists()
     assert [record.getMessage() for record in caplog.records][-2:] == [
         "ARCHIVE_DOWNLOAD_STARTED",
         "ARCHIVE_VERIFICATION_FAILED",
     ]
     assert extra_fields(caplog.records[-1]) == {
-        "archive_key": "libraries/broken.zip",
+        "archive_key": "l/broken.zip",
         "check": "size",
         "family": IndexFamily.LIBRARIES,
     }
@@ -269,10 +279,10 @@ def test_cancellation_after_archive_preserves_index_and_stale_files(
     archive_bytes = b"cancelled library"
     (source / "Servo.zip").write_bytes(archive_bytes)
     target = tmp_path / "target"
-    stale = target / "libraries" / "obsolete.zip"
+    stale = target / "l" / "obsolete.zip"
     stale.parent.mkdir(parents=True)
     stale.write_bytes(b"old")
-    previous_index = target / "library_index.json"
+    previous_index = target / "l" / "library_index.json"
     previous_index.write_text('{"state": "old"}', encoding="utf-8")
 
     with _http_root(source) as origin:
@@ -293,7 +303,7 @@ def test_cancellation_after_archive_preserves_index_and_stale_files(
         )
 
         def check_cancelled() -> None:
-            if (target / "libraries" / "Servo.zip").is_file():
+            if (target / "l" / "Servo.zip").is_file():
                 raise PublicationCancelledError(signal.SIGTERM)
 
         with pytest.raises(PublicationCancelledError):
@@ -302,7 +312,7 @@ def test_cancellation_after_archive_preserves_index_and_stale_files(
                 check_cancelled=check_cancelled,
             )
 
-    assert (target / "libraries" / "Servo.zip").read_bytes() == archive_bytes
+    assert (target / "l" / "Servo.zip").read_bytes() == archive_bytes
     assert stale.read_bytes() == b"old"
     assert previous_index.read_text(encoding="utf-8") == '{"state": "old"}'
 
@@ -340,7 +350,7 @@ def test_publication_dry_run_does_not_create_target(tmp_path: Path) -> None:
             )
         )
 
-    assert plan.archive_keys == ("libraries/not-fetched.zip",)
+    assert plan.archive_keys == ("l/not-fetched.zip",)
     assert not target.exists()
 
 

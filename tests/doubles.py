@@ -68,7 +68,8 @@ class RecordingPublicationTarget:
         stale_keys = tuple(
             key
             for key in self.present_keys
-            if key.startswith(f"{plan.family}/") and key not in plan.archive_keys
+            if key.startswith(f"{plan.family.archive_prefix}/")
+            and key not in plan.archive_keys
         )
         return plan.with_reconciliation(
             stale_keys=stale_keys,

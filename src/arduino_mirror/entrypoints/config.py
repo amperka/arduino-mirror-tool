@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from arduino_mirror.domain import IndexFamily
 
@@ -77,10 +78,34 @@ class Config:
     retry_attempts: int
     retry_base_delay: float
 
+    # region METHOD_index_key
+    # PURPOSE: Place the configured source index path in its family's archive namespace.
+    @property
+    def index_key(self) -> str:
+        """Return the validated family-prefixed target key for the configured index."""
+        parsed = urlsplit(self.input_index)
+        path = parsed.path
+        parts = path.lstrip("/").split("/")
+        if (
+            not parsed.scheme
+            or not parsed.netloc
+            or not path.startswith("/")
+            or not path.strip("/")
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
+            msg = "input index must have a non-empty absolute URL path"
+            raise ValueError(msg)
+        return f"{self.family.archive_prefix}/{'/'.join(parts)}"
+
+    # endregion METHOD_index_key
+
     # region METHOD_validate
     # PURPOSE: Reject incomplete target settings before a publication adapter could perform a partial publication.
     def validate(self) -> None:
         """Validate the selected target's required settings."""
+        if not self.index_key:
+            msg = "input index must have a non-empty absolute URL path"
+            raise ValueError(msg)
         match self.target:
             case TargetKind.S3:
                 missing = [

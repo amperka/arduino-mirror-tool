@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-13
 - **Supersedes:**
-- **Superseded by:**
+- **Superseded by:** ADR-0008 (archive and index layout only)
 
 ## Context
 
