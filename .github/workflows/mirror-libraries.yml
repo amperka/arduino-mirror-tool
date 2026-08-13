@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: mirror-libraries-publication
+  queue: max
+
 env:
   MIRROR_HOST: "https://arduino-downloads.amperka.ru"
   ARCHITECTURES: "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"
