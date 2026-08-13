@@ -12,7 +12,6 @@ permissions:
 
 concurrency:
   group: mirror-packages-publication
-  queue: max
 
 env:
   MIRROR_HOST: "https://arduino-downloads.amperka.ru"
