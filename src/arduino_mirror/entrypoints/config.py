@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ __all__ = [
     "DEFAULT_PACKAGES",
     "DEFAULT_PACKAGE_INPUT",
     "Config",
+    "TargetKind",
 ]
 
 DEFAULT_MIRROR_HOST = "https://arduino-downloads.amperka.ru"
@@ -34,6 +36,18 @@ DEFAULT_PACKAGE_INPUT = "https://downloads.arduino.cc/packages/package_index.jso
 DEFAULT_LIBRARY_INPUT = "https://downloads.arduino.cc/libraries/library_index.json"
 DEFAULT_ARCHITECTURES = ("avr", "samd", "sam", "megaavr", "mbed_nano", "mbed_rp2040")
 DEFAULT_PACKAGES = ("arduino", "builtin")
+
+
+# region CLASS_TargetKind
+# PURPOSE: Restrict publication configuration to storage targets that the composition root can build.
+class TargetKind(StrEnum):
+    """Supported publication storage targets."""
+
+    LOCAL = "local"
+    S3 = "s3"
+
+
+# endregion CLASS_TargetKind
 
 
 # region CLASS_Config
@@ -45,7 +59,7 @@ class Config:
     family: IndexFamily
     input_index: str
     mirror_host: str
-    target: str
+    target: TargetKind
     bucket: str
     prefix: str
     endpoint: str
@@ -61,26 +75,24 @@ class Config:
     # PURPOSE: Reject incomplete target settings before a publication adapter could perform a partial publication.
     def validate(self) -> None:
         """Validate the selected target's required settings."""
-        if self.target == "s3":
-            missing = [
-                name
-                for name, value in (
-                    ("bucket", self.bucket),
-                    ("access key", self.access_key),
-                    ("secret key", self.secret_key),
-                )
-                if not value
-            ]
-            if missing:
-                msg = f"s3 target requires {', '.join(missing)}"
-                raise ValueError(msg)
-        elif self.target == "local":
-            if not str(self.local_root):
-                msg = "local target requires local root"
-                raise ValueError(msg)
-        else:
-            msg = f"unknown target: {self.target}"
-            raise ValueError(msg)
+        match self.target:
+            case TargetKind.S3:
+                missing = [
+                    name
+                    for name, value in (
+                        ("bucket", self.bucket),
+                        ("access key", self.access_key),
+                        ("secret key", self.secret_key),
+                    )
+                    if not value
+                ]
+                if missing:
+                    msg = f"s3 target requires {', '.join(missing)}"
+                    raise ValueError(msg)
+            case TargetKind.LOCAL:
+                if not str(self.local_root):
+                    msg = "local target requires local root"
+                    raise ValueError(msg)
 
     # endregion METHOD_validate
 
@@ -126,7 +138,7 @@ class Config:
             family=family,
             input_index=setting("input_index", input_env, input_default),
             mirror_host=setting("mirror_host", "MIRROR_HOST", DEFAULT_MIRROR_HOST),
-            target=setting("target", "TARGET_KIND", "s3"),
+            target=TargetKind(setting("target", "TARGET_KIND", "s3")),
             bucket=setting("bucket", "TARGET_BUCKET", ""),
             prefix=setting("prefix", "TARGET_PREFIX", ""),
             endpoint=setting("endpoint", "TARGET_ENDPOINT", ""),

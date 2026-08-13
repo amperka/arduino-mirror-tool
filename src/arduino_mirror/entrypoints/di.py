@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
 
 from arduino_mirror.application import (
@@ -27,8 +26,7 @@ from arduino_mirror.infra import (
     S3PublicationTarget,
 )
 
-if TYPE_CHECKING:
-    from .config import Config
+from .config import Config, TargetKind
 
 __all__ = ["make_publication_use_case"]
 
@@ -41,23 +39,21 @@ def make_publication_use_case(config: Config) -> PublishFamily:
     """Compose the configured pipeline for one index family."""
     source = HttpIndexSource(urls={config.family: config.input_index})
     target: LocalPublicationTarget | S3PublicationTarget
-    if config.target == "local":
-        target = LocalPublicationTarget(
-            root=config.local_root,
-            prefix=config.prefix,
-        )
-    elif config.target == "s3":
-        target = S3PublicationTarget(
-            bucket=config.bucket,
-            endpoint=config.endpoint,
-            access_key=config.access_key,
-            secret_key=config.secret_key,
-            region=config.region,
-            prefix=config.prefix,
-        )
-    else:
-        msg = f"unknown target: {config.target}"
-        raise ValueError(msg)
+    match config.target:
+        case TargetKind.LOCAL:
+            target = LocalPublicationTarget(
+                root=config.local_root,
+                prefix=config.prefix,
+            )
+        case TargetKind.S3:
+            target = S3PublicationTarget(
+                bucket=config.bucket,
+                endpoint=config.endpoint,
+                access_key=config.access_key,
+                secret_key=config.secret_key,
+                region=config.region,
+                prefix=config.prefix,
+            )
     policy = _policy_for(config)
     logger.debug(
         "PUBLICATION_PIPELINE_COMPOSED",

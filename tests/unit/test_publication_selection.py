@@ -23,7 +23,7 @@ from arduino_mirror.application import (
     PublishFamily,
 )
 from arduino_mirror.domain import IndexFamily
-from arduino_mirror.entrypoints.config import Config
+from arduino_mirror.entrypoints.config import Config, TargetKind
 from arduino_mirror.entrypoints.signals import PublicationCancelledError
 from tests.doubles import (
     FixtureIndexSource,
@@ -331,6 +331,7 @@ def test_configuration_cli_precedence_and_family_inputs() -> None:
     assert packages.architectures == ("sam",)
     assert packages.package_names == ("builtin",)
     assert packages.dry_run is False
+    assert packages.target is TargetKind.S3
     assert libraries.input_index == "libraries-environment.json"
     assert libraries.dry_run is True
 
