@@ -163,6 +163,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Plan publication without downloading archives or writing to the target.",
     )
     parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=None,
+        help="Maximum attempts for transient network operations (default: 10).",
+    )
+    parser.add_argument(
+        "--retry-base-delay",
+        type=float,
+        default=None,
+        help="Base seconds for retry exponential backoff (default: 1.0).",
+    )
+    parser.add_argument(
         "-l",
         "--log-level",
         type=_parse_log_level,

@@ -20,7 +20,8 @@ from minio import Minio
 
 from arduino_mirror.domain import Archive, IndexFamily, PublicationPlan
 
-from .archive_tempfile import download_verified
+from .archive_tempfile import VerifiedArchive, download_verified
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_s3, retry_call
 
 if TYPE_CHECKING:
     from arduino_mirror.domain import PublicationCancellation
@@ -51,12 +52,14 @@ class S3PublicationTarget:
         region: str = "",
         prefix: str = "",
         timeout_seconds: float = 600.0,
+        retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
     ) -> None:
         """Create one S3-compatible target from resolved composition settings."""
         host, secure = _minio_endpoint(endpoint)
         self._bucket = bucket
         self._prefix = prefix.strip("/")
         self._timeout_seconds = timeout_seconds
+        self._retry_policy = retry_policy
         self._client = Minio(
             host,
             access_key=access_key,
@@ -71,13 +74,18 @@ class S3PublicationTarget:
         """Return a plan reconciled with one S3 family listing."""
         prefix = self._object_key(plan.family.value) + "/"
         logical_prefix = f"{plan.family}/"
-        present = {
-            logical_prefix + name.removeprefix(prefix): item
-            for item in self._client.list_objects(
+        listed = retry_call(
+            lambda: self._client.list_objects(
                 self._bucket,
                 prefix=prefix,
                 recursive=True,
-            )
+            ),
+            is_retriable=is_transient_s3,
+            policy=self._retry_policy,
+        )
+        present = {
+            logical_prefix + name.removeprefix(prefix): item
+            for item in listed
             if isinstance(name := item.object_name, str) and name.startswith(prefix)
         }
         stale_keys = tuple(sorted(set(present) - set(plan.archive_keys)))
@@ -113,11 +121,11 @@ class S3PublicationTarget:
                 cancellation,
             ) as verified:
                 cancellation.check()
-                self._client.put_object(
-                    self._bucket,
-                    self._object_key(archive.key),
-                    verified.stream,
-                    length=verified.size,
+                retry_call(
+                    lambda a=archive, v=verified: self._put_archive(a, v),
+                    is_retriable=is_transient_s3,
+                    policy=self._retry_policy,
+                    cancellation=cancellation,
                 )
             logger.info("Published %s", archive.key)
         logger.debug(
@@ -137,13 +145,11 @@ class S3PublicationTarget:
     ) -> None:
         """Overwrite the selected family's published index object."""
         cancellation.check()
-        body = json.dumps(plan.index, ensure_ascii=False, indent=2).encode("utf-8")
-        self._client.put_object(
-            self._bucket,
-            self._object_key(_INDEX_NAMES[plan.family]),
-            io.BytesIO(body),
-            length=len(body),
-            content_type="application/json",
+        retry_call(
+            lambda: self._put_index(plan),
+            is_retriable=is_transient_s3,
+            policy=self._retry_policy,
+            cancellation=cancellation,
         )
         logger.info("Published %s", _INDEX_NAMES[plan.family])
         logger.debug(
@@ -161,7 +167,12 @@ class S3PublicationTarget:
         """Delete the supplied family-owned S3 stale object keys."""
         for key in plan.stale_keys:
             cancellation.check()
-            self._client.remove_object(self._bucket, self._object_key(key))
+            retry_call(
+                lambda k=key: self._remove_key(k),
+                is_retriable=is_transient_s3,
+                policy=self._retry_policy,
+                cancellation=cancellation,
+            )
             logger.info("Removed %s", key)
         logger.debug(
             "TARGET_STALE_CLEANED",
@@ -169,6 +180,43 @@ class S3PublicationTarget:
         )
 
     # endregion METHOD_cleanup_stale
+
+    # region METHOD__put_archive
+    # PURPOSE: Upload one verified archive, rewinding the stream so a retry re-sends full bytes.
+    def _put_archive(self, archive: Archive, verified: VerifiedArchive) -> None:
+        """Upload one verified archive under its family-owned object key."""
+        verified.stream.seek(0)
+        self._client.put_object(
+            self._bucket,
+            self._object_key(archive.key),
+            verified.stream,
+            length=verified.size,
+        )
+
+    # endregion METHOD__put_archive
+
+    # region METHOD__put_index
+    # PURPOSE: Serialize and upload one family index from fresh bytes so a retry never sends a partial body.
+    def _put_index(self, plan: PublicationPlan) -> None:
+        """Upload one family index object from freshly serialized bytes."""
+        body = json.dumps(plan.index, ensure_ascii=False, indent=2).encode("utf-8")
+        self._client.put_object(
+            self._bucket,
+            self._object_key(_INDEX_NAMES[plan.family]),
+            io.BytesIO(body),
+            length=len(body),
+            content_type="application/json",
+        )
+
+    # endregion METHOD__put_index
+
+    # region METHOD__remove_key
+    # PURPOSE: Delete one family-owned stale object key as an idempotent retry unit.
+    def _remove_key(self, key: str) -> None:
+        """Delete one family-owned stale object key."""
+        self._client.remove_object(self._bucket, self._object_key(key))
+
+    # endregion METHOD__remove_key
 
     # region METHOD__archive_is_published
     # PURPOSE: Confirm a same-key S3 object by its listed declared size without an object-specific request.

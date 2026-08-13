@@ -27,6 +27,8 @@ __all__ = [
     "DEFAULT_MIRROR_HOST",
     "DEFAULT_PACKAGES",
     "DEFAULT_PACKAGE_INPUT",
+    "DEFAULT_RETRY_ATTEMPTS",
+    "DEFAULT_RETRY_BASE_DELAY",
     "Config",
     "TargetKind",
 ]
@@ -36,6 +38,8 @@ DEFAULT_PACKAGE_INPUT = "https://downloads.arduino.cc/packages/package_index.jso
 DEFAULT_LIBRARY_INPUT = "https://downloads.arduino.cc/libraries/library_index.json"
 DEFAULT_ARCHITECTURES = ("avr", "samd", "sam", "megaavr", "mbed_nano", "mbed_rp2040")
 DEFAULT_PACKAGES = ("arduino", "builtin")
+DEFAULT_RETRY_ATTEMPTS = 10
+DEFAULT_RETRY_BASE_DELAY = 1.0
 
 
 # region CLASS_TargetKind
@@ -70,6 +74,8 @@ class Config:
     secret_key: str
     architectures: tuple[str, ...]
     package_names: tuple[str, ...]
+    retry_attempts: int
+    retry_base_delay: float
 
     # region METHOD_validate
     # PURPOSE: Reject incomplete target settings before a publication adapter could perform a partial publication.
@@ -103,7 +109,7 @@ class Config:
         cls,
         *,
         family: IndexFamily,
-        values: Mapping[str, str | bool | None],
+        values: Mapping[str, str | bool | float | int | None],
         environment: Mapping[str, str],
     ) -> Config:
         """Resolve command settings from parser values and a supplied environment mapping."""
@@ -117,6 +123,30 @@ class Config:
         def csv(name: str, env_name: str, default: tuple[str, ...]) -> tuple[str, ...]:
             value = setting(name, env_name, ",".join(default))
             return tuple(part.strip() for part in value.split(",") if part.strip())
+
+        def retry_attempts_value() -> int:
+            value = values.get("retry_attempts")
+            if isinstance(value, int) and not isinstance(value, bool):
+                parsed: int = value
+            else:
+                raw = environment.get("RETRY_ATTEMPTS")
+                parsed = int(raw) if raw else DEFAULT_RETRY_ATTEMPTS
+            if parsed < 1:
+                msg = "retry attempts must be a positive integer"
+                raise ValueError(msg)
+            return parsed
+
+        def retry_base_delay_value() -> float:
+            value = values.get("retry_base_delay")
+            if isinstance(value, float):
+                parsed: float = value
+            else:
+                raw = environment.get("RETRY_BASE_DELAY")
+                parsed = float(raw) if raw else DEFAULT_RETRY_BASE_DELAY
+            if parsed < 0:
+                msg = "retry base delay must be non-negative"
+                raise ValueError(msg)
+            return parsed
 
         dry_value = values.get("dry_run")
         dry_run = (
@@ -149,6 +179,8 @@ class Config:
             secret_key=setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
             architectures=csv("architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES),
             package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
+            retry_attempts=retry_attempts_value(),
+            retry_base_delay=retry_base_delay_value(),
         )
 
     # endregion METHOD_from_values

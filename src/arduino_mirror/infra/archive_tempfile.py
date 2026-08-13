@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, BinaryIO, cast
 
 import requests
 
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_http, retry_call
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
@@ -92,6 +94,7 @@ def download_verified(
     timeout_seconds: float,
     family: IndexFamily,
     cancellation: PublicationCancellation,
+    retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
 ) -> Iterator[VerifiedArchive]:
     """Yield a rewindable verified temporary archive stream and clean it on context exit."""
     logger.info("Downloading %s", archive.key)
@@ -99,26 +102,38 @@ def download_verified(
         "ARCHIVE_DOWNLOAD_STARTED",
         extra={"archive_key": archive.key, "family": family},
     )
-    hasher = hashlib.sha256()
-    size = 0
     with tempfile.SpooledTemporaryFile(
         max_size=_SPOOL_MAX_MEMORY_BYTES, mode="w+b"
     ) as temporary:
-        with (
-            cancellation.interrupt_download(),
-            requests.get(
-                archive.source_url, stream=True, timeout=timeout_seconds
-            ) as response,
-        ):
-            response.raise_for_status()
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                cancellation.check()
-                if chunk:
-                    temporary.write(chunk)
-                    hasher.update(chunk)
-                    size += len(chunk)
+
+        def transfer() -> tuple[str, int]:
+            temporary.seek(0)
+            temporary.truncate()
+            hasher = hashlib.sha256()
+            size = 0
+            with (
+                cancellation.interrupt_download(),
+                requests.get(
+                    archive.source_url, stream=True, timeout=timeout_seconds
+                ) as response,
+            ):
+                response.raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    cancellation.check()
+                    if chunk:
+                        temporary.write(chunk)
+                        hasher.update(chunk)
+                        size += len(chunk)
+            return hasher.hexdigest(), size
+
+        digest, size = retry_call(
+            transfer,
+            is_retriable=is_transient_http,
+            policy=retry_policy,
+            cancellation=cancellation,
+        )
         cancellation.check()
-        _raise_if_invalid(archive, family, hasher.hexdigest(), size)
+        _raise_if_invalid(archive, family, digest, size)
         temporary.seek(0)
         logger.info("Verified %s (%s bytes)", archive.key, size)
         logger.debug(

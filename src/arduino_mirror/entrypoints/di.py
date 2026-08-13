@@ -23,6 +23,7 @@ from arduino_mirror.domain import IndexFamily, SelectionPolicy
 from arduino_mirror.infra import (
     HttpIndexSource,
     LocalPublicationTarget,
+    RetryPolicy,
     S3PublicationTarget,
 )
 
@@ -37,7 +38,14 @@ logger = logging.getLogger(__name__)
 # PURPOSE: Give one CLI invocation a source and selected target without leaking concrete adapters into the application layer.
 def make_publication_use_case(config: Config) -> PublishFamily:
     """Compose the configured pipeline for one index family."""
-    source = HttpIndexSource(urls={config.family: config.input_index})
+    retry_policy = RetryPolicy(
+        max_attempts=config.retry_attempts,
+        base_delay=config.retry_base_delay,
+    )
+    source = HttpIndexSource(
+        urls={config.family: config.input_index},
+        retry_policy=retry_policy,
+    )
     target: LocalPublicationTarget | S3PublicationTarget
     match config.target:
         case TargetKind.LOCAL:
@@ -53,6 +61,7 @@ def make_publication_use_case(config: Config) -> PublishFamily:
                 secret_key=config.secret_key,
                 region=config.region,
                 prefix=config.prefix,
+                retry_policy=retry_policy,
             )
     policy = _policy_for(config)
     logger.debug(

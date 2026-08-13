@@ -14,13 +14,15 @@ import io
 import logging
 from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 from unittest.mock import ANY
 
 import pytest
+from minio.error import S3Error
 
 from arduino_mirror.domain import Archive, IndexFamily, PublicationPlan
 from arduino_mirror.infra.archive_tempfile import VerifiedArchive
+from arduino_mirror.infra.retry import RetryPolicy
 from arduino_mirror.infra.s3_target import S3PublicationTarget
 from tests.log_assertions import extra_fields
 
@@ -37,6 +39,8 @@ class _NoCancellation:
 
 
 _NO_CANCELLATION = _NoCancellation()
+
+_TRANSIENT_PUT_FAILURES = 2
 
 
 # region CLASS_FakeMinio
@@ -211,3 +215,61 @@ def test_s3_target_skips_archives_confirmed_by_one_listing(monkeypatch) -> None:
 
 
 # endregion FUNC_test_s3_target_skips_archives_confirmed_by_one_listing
+
+
+# region FUNC_test_s3_target_retries_transient_put_then_succeeds
+# PURPOSE: Verify the S3 target retries a transient upload failure and then publishes the archive.
+def test_s3_target_retries_transient_put_then_succeeds(monkeypatch) -> None:
+    """A transient InternalError on upload is retried until the archive is published."""
+
+    put_attempts: list[int] = []
+
+    class TransientThenSuccessMinio(FakeMinio):
+        def put_object(self, *args: Any, **kwargs: Any) -> None:
+            put_attempts.append(1)
+            if len(put_attempts) < _TRANSIENT_PUT_FAILURES + 1:
+                raise S3Error(
+                    cast(Any, SimpleNamespace(status=503)),
+                    "InternalError",
+                    "m",
+                    "r",
+                    "ri",
+                    "hi",
+                )
+            self.calls.append(("put_object", args, kwargs))
+
+    FakeMinio.instances.clear()
+    monkeypatch.setattr(
+        "arduino_mirror.infra.s3_target.Minio", TransientThenSuccessMinio
+    )
+    monkeypatch.setattr(
+        "arduino_mirror.infra.s3_target.download_verified", _verified_archive
+    )
+    target = S3PublicationTarget(
+        bucket="mirror",
+        access_key="access",
+        secret_key="secret",
+        prefix="managed",
+        retry_policy=RetryPolicy(max_attempts=5, base_delay=0),
+    )
+    plan = PublicationPlan(
+        family=IndexFamily.LIBRARIES,
+        releases=("Servo@1.0.0",),
+        archives=(
+            Archive(
+                key="libraries/Servo-1.0.0.zip",
+                source_url="https://origin.test.invalid/Servo-1.0.0.zip",
+            ),
+        ),
+        index={"libraries": []},
+    )
+
+    reconciled = target.reconcile(plan)
+    target.publish_archives(reconciled, cancellation=_NO_CANCELLATION)
+
+    client = TransientThenSuccessMinio.instances[0]
+    assert len(put_attempts) == _TRANSIENT_PUT_FAILURES + 1
+    assert [call[0] for call in client.calls] == ["list_objects", "put_object"]
+
+
+# endregion FUNC_test_s3_target_retries_transient_put_then_succeeds

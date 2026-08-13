@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_http, retry_call
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -34,6 +36,7 @@ class HttpIndexSource:
 
     urls: Mapping[IndexFamily, str]
     timeout_seconds: float = 60.0
+    retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY
 
     # region METHOD_fetch
     # PURPOSE: Return validated JSON object data for the requested family.
@@ -46,9 +49,18 @@ class HttpIndexSource:
             raise ValueError(msg) from error
         logger.info("Fetching %s index", family.value)
         logger.debug("SOURCE_REQUESTED", extra={"family": family})
-        try:
+
+        def request() -> requests.Response:
             response = requests.get(url, timeout=self.timeout_seconds)
             response.raise_for_status()
+            return response
+
+        try:
+            response = retry_call(
+                request,
+                is_retriable=is_transient_http,
+                policy=self.retry_policy,
+            )
         except requests.RequestException as error:
             logger.debug(
                 "SOURCE_REQUEST_FAILED",

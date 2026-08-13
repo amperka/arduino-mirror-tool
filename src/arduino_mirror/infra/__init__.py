@@ -11,12 +11,15 @@
 from .archive_tempfile import ArchiveVerificationError, download_verified
 from .http_source import HttpIndexSource
 from .local_target import LocalPublicationTarget
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy
 from .s3_target import S3PublicationTarget
 
 __all__ = [
+    "DEFAULT_RETRY_POLICY",
     "ArchiveVerificationError",
     "HttpIndexSource",
     "LocalPublicationTarget",
+    "RetryPolicy",
     "S3PublicationTarget",
     "download_verified",
 ]
