@@ -8,4 +8,20 @@
 # KEYWORDS: domain facade, public api, re-export, entities, ports, events, exceptions, settings
 # endregion MODULE_CONTRACT
 
-__all__ = []
+from .ports import (
+    IndexSource,
+    PublicationCancellation,
+    PublicationTarget,
+    SelectionPolicy,
+)
+from .publication import Archive, IndexFamily, PublicationPlan
+
+__all__ = [
+    "Archive",
+    "IndexFamily",
+    "IndexSource",
+    "PublicationCancellation",
+    "PublicationPlan",
+    "PublicationTarget",
+    "SelectionPolicy",
+]

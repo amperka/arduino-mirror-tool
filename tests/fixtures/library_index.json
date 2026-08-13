@@ -1,0 +1,39 @@
+{
+  "libraries": [
+    {
+      "name": "Servo",
+      "version": "1.2",
+      "sentence": "Old Servo release",
+      "url": "http://fixture.arduino.test/libraries/Servo-1.2.zip",
+      "archiveFileName": "Servo-1.2.zip",
+      "size": 100,
+      "checksum": "SHA-256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "Servo",
+      "version": "1.2.2",
+      "sentence": "Latest Servo release",
+      "url": "http://fixture.arduino.test/libraries/Servo-1.2.2.zip",
+      "archiveFileName": "Servo-1.2.2.zip",
+      "size": 120,
+      "checksum": "SHA-256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "customField": {"preserved": true}
+    },
+    {
+      "name": "WiFiNINA",
+      "version": "1.8.13-beta.1",
+      "url": "http://fixture.arduino.test/libraries/WiFiNINA-1.8.13-beta.1.zip",
+      "archiveFileName": "WiFiNINA-1.8.13-beta.1.zip",
+      "size": 200,
+      "checksum": "SHA-256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "name": "WiFiNINA",
+      "version": "1.8.13",
+      "url": "http://fixture.arduino.test/libraries/WiFiNINA-1.8.13.zip",
+      "archiveFileName": "WiFiNINA-1.8.13.zip",
+      "size": 210,
+      "checksum": "SHA-256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}

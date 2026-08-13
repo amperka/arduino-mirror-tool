@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-05T15:15:35.163033801Z"
+exclude-newer = "2026-08-06T12:46:40.495944701Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -17,7 +17,6 @@ source = { editable = "." }
 dependencies = [
     { name = "minio" },
     { name = "requests" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 
 [package.dev-dependencies]
@@ -38,13 +37,12 @@ dev = [
 requires-dist = [
     { name = "minio", specifier = ">=7.2" },
     { name = "requests", specifier = ">=2.28" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.13.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "commitizen" },
-    { name = "import-linter", specifier = ">=2.5.2" },
+    { name = "import-linter", specifier = ">=2.6" },
     { name = "mdlint", specifier = ">=0.1" },
     { name = "prek", specifier = ">=0.4.10" },
     { name = "pytest", specifier = "~=9.0" },

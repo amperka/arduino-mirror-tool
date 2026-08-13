@@ -1,0 +1,41 @@
+---
+name: mirror-libraries
+
+on:
+  schedule:
+    # Weekly, Sunday 04:17 UTC (avoid the :00 storm).
+    - cron: "17 4 * * 0"
+  workflow_dispatch: {} # manual run from the Actions tab
+
+permissions:
+  contents: read
+
+env:
+  MIRROR_HOST: "https://arduino-downloads.amperka.ru"
+  ARCHITECTURES: "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"
+  PACKAGES: "arduino,builtin"
+  TARGET_KIND: "s3"
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+
+      - name: Install the project
+        run: uv sync --locked
+
+      - name: Publish packages then libraries
+        env:
+          TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
+          TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
+          TARGET_PREFIX: ""
+          AWS_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
+        run: uv run arduino-mirror libraries

@@ -1,6 +1,7 @@
 cache/
 staging/
 manifest.json
+mirror-out/
 official_index.json
 __pycache__/
 *.pyc

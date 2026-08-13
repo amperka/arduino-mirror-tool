@@ -29,7 +29,7 @@ _PACKAGE = __name__.split(".", 1)[0]
 
 
 # region CLASS_LogFormatter
-# PURPOSE: Let developers observe internal execution flow at DEBUG level while keeping production output clean.
+# PURPOSE: Let developers observe internal execution flow at DEBUG level while keeping publication output clean.
 class LogFormatter(logging.Formatter):
     """Formatter with two rendering branches rooted on the extra-diff discriminator.
 

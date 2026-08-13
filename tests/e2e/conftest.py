@@ -12,10 +12,12 @@ import pytest
 
 _LOGGER = "arduino_mirror"
 
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "/tests/e2e/" in str(item.path):
             item.add_marker("e2e")
+
 
 class LogCaptureHandler(logging.Handler):
     def __init__(self, records: list[logging.LogRecord]) -> None:
@@ -24,8 +26,6 @@ class LogCaptureHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self._records.append(record)
-
-
 
 
 @pytest.fixture

@@ -5,4 +5,6 @@
 # KEYWORDS: entrypoints, facade, public api, re-export
 # endregion MODULE_CONTRACT
 
-__all__ = []
+from .cli import main
+
+__all__ = ["main"]
