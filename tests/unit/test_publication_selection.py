@@ -172,6 +172,52 @@ def test_libraries_fixture_selects_latest_and_preserves_fields() -> None:
 # endregion FUNC_test_libraries_fixture_selects_latest_and_preserves_fields
 
 
+# region FUNC_test_library_selection_ranks_textual_prereleases_above_numeric
+# PURPOSE: Verify SemVer textual prerelease identifiers outrank numeric identifiers while stable releases remain highest.
+def test_library_selection_ranks_textual_prereleases_above_numeric() -> None:
+    """Textual prereleases win over numeric ones, but stable releases win overall."""
+    policy = LatestLibrariesPolicy(
+        mirror_host="https://mirror.test.invalid",
+        origin_host="https://downloads.arduino.test",
+    )
+
+    plan = policy.select(
+        {
+            "libraries": [
+                {
+                    "name": "Example",
+                    "version": "1.0.0-1",
+                    "url": "https://downloads.arduino.test/Example-1.0.0-1.zip",
+                },
+                {
+                    "name": "Example",
+                    "version": "1.0.0-alpha",
+                    "url": "https://downloads.arduino.test/Example-1.0.0-alpha.zip",
+                },
+                {
+                    "name": "Stable",
+                    "version": "1.0.0-alpha",
+                    "url": "https://downloads.arduino.test/Stable-1.0.0-alpha.zip",
+                },
+                {
+                    "name": "Stable",
+                    "version": "1.0.0",
+                    "url": "https://downloads.arduino.test/Stable-1.0.0.zip",
+                },
+            ]
+        }
+    )
+
+    assert plan.releases == ("Example@1.0.0-alpha", "Stable@1.0.0")
+    assert plan.archive_keys == (
+        "l/Example-1.0.0-alpha.zip",
+        "l/Stable-1.0.0.zip",
+    )
+
+
+# endregion FUNC_test_library_selection_ranks_textual_prereleases_above_numeric
+
+
 # region FUNC_test_external_releases_bypass_origin_latest_selection_and_rewrite
 # PURPOSE: Verify external releases stay intact and cannot displace the latest origin-host release for either index family.
 def test_external_releases_bypass_origin_latest_selection_and_rewrite() -> None:

@@ -5,9 +5,7 @@
 Define the current contract for independently mirroring Arduino Boards Manager
 and Library Manager indexes from one configured HTTP origin to a local directory
 or S3-compatible target.
-
 ## Requirements
-
 ### Requirement: Independent family commands
 
 The system SHALL expose `packages` and `libraries` commands. Each invocation
@@ -31,10 +29,14 @@ SHALL retain the newest eligible configured-origin platform per architecture and
 the exact tool versions required by each retained platform. For a configured
 package with no platforms, it SHALL retain the newest eligible tool version per
 tool name. The library policy SHALL retain the newest eligible configured-origin
-release per exact library name. Library records, and configured package/platform
-records, outside the configured origin SHALL remain unchanged and SHALL create
-no mirror archive work. Selected origin archive URLs SHALL be rewritten to the
-configured mirror host while other retained record fields are preserved.
+release per exact library name. For library releases with the same base version,
+SemVer numeric prerelease identifiers SHALL have lower precedence than textual
+prerelease identifiers at the same identifier position; stable releases SHALL
+have higher precedence than prereleases. Library records, and configured
+package/platform records, outside the configured origin SHALL remain unchanged
+and SHALL create no mirror archive work. Selected origin archive URLs SHALL be
+rewritten to the configured mirror host while other retained record fields are
+preserved.
 
 #### Scenario: Preserve an external library release
 
@@ -42,6 +44,12 @@ configured mirror host while other retained record fields are preserved.
   origin
 - **THEN** the generated index retains that record and its original URL, and no
   archive descriptor is created for it
+
+#### Scenario: Prefer a textual library prerelease identifier
+
+- **WHEN** eligible origin releases for one library are `1.0.0-1` and
+  `1.0.0-alpha`
+- **THEN** the selected release is `1.0.0-alpha`
 
 ### Requirement: Verified archive publication
 

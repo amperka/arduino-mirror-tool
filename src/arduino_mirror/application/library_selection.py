@@ -146,7 +146,7 @@ def _version_key(
     if prerelease is None:
         return (numeric, 1, ())
     parts = tuple(
-        (1, int(part)) if part.isdigit() else (0, part)
+        (0, int(part)) if part.isdigit() else (1, part)
         for part in prerelease.split(".")
     )
     return (numeric, 0, parts)
