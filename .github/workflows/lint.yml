@@ -1,0 +1,45 @@
+---
+# yamllint disable rule:line-length
+name: Lint Code Base
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read # access to check out code and install dependencies
+
+env:
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
+
+      - name: ruff format
+        run: uv run ruff format --check --diff
+
+      - name: ruff check
+        run: uv run ruff check --output-format=github
+
+      - name: type check
+        run: uv run zuban check
+
+      - name: import-linter
+        run: uv run lint-imports
+
+      - name: TOML formatter
+        run: uv run tombi format --check --diff
+
+      - name: Markdown lint
+        run: uv run mdlint check

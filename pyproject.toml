@@ -1,35 +1,143 @@
 [project]
 name = "arduino-mirror"
-version = "0.1.0"
-description = "Filtered, host-rewritten static mirror of Arduino Boards Manager packages (avr), published to Yandex S3 via GitHub Actions."
-readme = "README.md"
-requires-python = ">=3.10"
+version = "0.2.0"
+description = "Filtered, host-rewritten static mirror of Arduino Boards Manager packages (avr) and libraries, published to Yandex S3 via GitHub Actions."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    { name = "Sergei Korolev", email = "knopki@duck.com" },
+  { name = "Sergei Korolev", email = "knopki@duck.com" },
 ]
-dependencies = ["requests>=2.28", "minio>=7.2"]
+dependencies = [
+  "minio>=7.2",
+  "requests>=2.28",
+]
+
+[project.urls]
+Home = "https://github.com/amperka/arduino-mirror"
+Issues = "https://github.com/amperka/arduino-mirror/issues"
+Source = "https://github.com/amperka/arduino-mirror"
 
 [project.scripts]
-arduino-mirror = "arduino_mirror.cli:main"
+arduino-mirror = "arduino_mirror.entrypoints.cli:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=8",
-    "ruff>=0.15.20",
-    "zuban>=0.9.0",
+  "commitizen",
+  "import-linter>=2.6",
+  "mdlint>=0.1",
+  "prek>=0.4.10",
+  "pytest~=9.0",
+  "pytest-cov~=7.0",
+  "pytest-mock~=3.0",
+  "ruff>=0.16.0",
+  "tombi>=1.2.0",
+  "zuban~=0.9",
 ]
 
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_files = ["pyproject.toml:^version"]
+version_provider = "pep621"
+update_changelog_on_bump = true
+changelog_incremental = true
+
+[tool.importlinter]
+root_package = "src.arduino_mirror"
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Clean architecture layers"
+type = "layers"
+layers = [
+  "src.arduino_mirror.entrypoints",
+  "src.arduino_mirror.infra",
+  "src.arduino_mirror.application",
+  "src.arduino_mirror.domain",
+  "src.arduino_mirror.shared",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = []
+log_cli_format = "[%(name)s][%(funcName)s]:%(lineno)s %(message)s"
+log_format = "[%(name)s][%(funcName)s]:%(lineno)s %(message)s"
+markers = [
+  "unit: unit tests (no external services)",
+  "integration: integration tests",
+  "e2e: end-to-end tests",
+]
+testpaths = ["tests/unit", "tests/integration", "tests/e2e"]
+
 [tool.ruff]
-line-length = 100
-target-version = "py310"
-src = ["src"]
+extend-exclude = ["src/arduino_mirror.bak", "tests.bak"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM"]
-ignore = ["SIM102"]
+select = ["ALL"]
+ignore = [
+  "C901",  # complexity - FIXME: enable and refactor bad code
+  "BLE",  # blind except
+  "D105",  # undocumented magic method
+  "D107",  # undocumented __init__
+  "D203",  # incorrect-blank-line-before-class
+  "D213",  # multi-line-summary-second-line
+  "E501",  # Line too long
+  "ERA001",  # Found commented-out code
+  "FBT",  # boolean positional args are fine
+  "FIX002",  # we have TODOs
+  "S101",  # FIXME: asserts are evil, use TypeGuard
 
-[tool.zuban]
+  # When using Ruff as a formatter, we recommend avoiding the following lint rules:
+  "W191",  # tab-indentation
+  "E111",  # indentation-with-invalid-multiple
+  "E114",  # indentation-with-invalid-multiple-comment
+  "E117",  # over-indented
+  "D203",  # incorrect-blank-line-before-class
+  "D206",  # docstring-tab-indentation
+  "D300",  # triple-single-quotes
+  "Q000",  # bad-quotes-inline-string
+  "Q001",  # bad-quotes-multiline-string
+  "Q002",  # bad-quotes-docstring
+  "Q003",  # avoidable-escaped-quote
+  "Q004",  # unnecessary-escaped-quote
+  "COM812",  # missing-trailing-comma
+  "COM819",  # prohibited-trailing-comma
+  "CPY001",  # project doesn't use copyright headers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "ANN",  # test fixtures/mocks/doubles use Any extensively
+  "ARG",  # unused arguments for fixtures
+  "B011",  # assert-false
+  "B017",  # assert-raises-exception patterns
+  "DTZ",  # datetime rules
+  "D",  # tests do not need docstrings
+  "EM",  # exception-message style is not load-bearing in tests
+  "TRY",  # exception-message style is not load-bearing in tests
+  "E402",  # module-level imports after patches are common in tests
+  "FIX",
+  "TD",  # TODOs in test scaffolding
+  "PERF401",  # readable loops preferred over comprehensions in test data
+  "PLC0415",  # local imports are used for monkeypatching/mocking
+  "PLR0915",  # test functions are often long by nature
+  "RUF002",
+  "RUF003",  # arrows/symbols in test docstrings and comments
+  "S",  # asserts, exec, /tmp paths, fake creds
+  "SLF",  # private methods
+  "TC",  # third-party imports in type-checking blocks not needed in tests
+  "TRY",  # log/exception style not enforced in tests
+]
+"docs/_semantic_template_reference.py" = ["D", "INP"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["arduino_mirror*"]
 
 [tool.uv]
 package = true
+exclude-newer = "7 days"

@@ -1,6 +1,7 @@
 cache/
 staging/
 manifest.json
+mirror-out/
 official_index.json
 __pycache__/
 *.pyc
@@ -8,3 +9,4 @@ __pycache__/
 .venv/
 .pytest_cache/
 *.egg-info/
+.codegraph

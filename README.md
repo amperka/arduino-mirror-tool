@@ -1,19 +1,22 @@
 # arduino-mirror
 
-Static, filtered mirror of Arduino Boards Manager packages for networks where
-`downloads.arduino.cc` is unreachable. Mirrors the `arduino` package (latest
-versions) across avr, samd, sam, megaavr, mbed_nano, and mbed_rp2040
-architectures by default, plus the `builtin` package (IDE tools: ctags,
-discoveries, serial-monitor) mirrored wholesale with no architecture filter,
-and republishes the Boards Manager index with archive URLs rewritten to a
-mirror host. Sync runs weekly (GitHub Actions) or on manual dispatch.
+Static, filtered mirror of Arduino Boards Manager packages and Library Manager
+libraries for networks where `downloads.arduino.cc` is unreachable. It keeps the
+latest selected releases, rewrites configured-origin archive URLs to a mirror
+host, verifies downloaded archive bytes, and publishes independently to an
+S3-compatible bucket or a local directory.
 
-## For end users (no VPN)
+Package archives belong to `p/` and library archives to `l/`; the complete
+origin-relative path follows that stable namespace.  Indexes follow the same
+rule: `p/packages/package_index.json` and `l/libraries/library_index.json`.
 
-In Arduino IDE 2.x: **File → Preferences → Additional Boards Manager URLs**, add:
+## For end users
 
-```
-https://arduino-downloads.amperka.ru/package_index.json
+Arduino IDE 2.x users add the package index to **File → Preferences →
+Additional Boards Manager URLs**:
+
+```text
+https://arduino-downloads.amperka.ru/p/packages/package_index.json
 ```
 
 Install boards normally; the mirror overrides the official `arduino:*` entries
@@ -25,91 +28,74 @@ mbed_rp2040).
 
 ## CLI
 
-A single `arduino-mirror` entrypoint with `manifest` (build the filtered +
-host-rewritten index), `sync` (reconcile a target against a manifest), and
-`run` (both, the CI entrypoint):
+The `packages` and `libraries` commands run independent publication pipelines.
+Each command fetches one HTTP index, selects latest configured-origin releases,
+verifies archives, uploads archives before its index, then cleans stale objects
+only within its own prefix.
 
 ```bash
-# 1. Build the filtered + host-rewritten manifest only.
-arduino-mirror manifest \
-  --input https://downloads.arduino.cc/packages/package_index.json \
-  --mirror-host https://arduino-downloads.amperka.ru \
-  --architectures avr --packages arduino,builtin --latest-only \
-  --manifest manifest.json
+# Publish configured Board Manager packages to S3-compatible storage.
+arduino-mirror packages \
+  --target s3 \
+  --bucket my-bucket \
+  --endpoint storage.yandexcloud.net
 
-# 2. Reconcile an S3 bucket (minio / S3-compatible) against the manifest.
-arduino-mirror sync \
-  --manifest manifest.json \
-  --target s3 --bucket my-bucket --endpoint storage.yandexcloud.net
+# Publish selected latest Library Manager libraries to the same target.
+arduino-mirror libraries \
+  --target s3 \
+  --bucket my-bucket \
+  --endpoint storage.yandexcloud.net
 
-# 2b. ...or a local directory tree (no credentials; good for dry runs / previews).
-arduino-mirror sync --manifest manifest.json --target local --local-root ./mirror-out
+# Exercise one publication pipeline without S3 credentials.
+arduino-mirror libraries \
+  --input http://127.0.0.1:8080/libraries/library_index.json \
+  --target local \
+  --local-root ./mirror-out
 
-# 3. Build + sync in one shot (the GitHub Actions entrypoint).
-arduino-mirror run
+# Inspect a plan without reading or writing a target.
+arduino-mirror packages --dry-run --target local
 ```
 
-Every flag also reads from an `UPPER_CASE` env var (e.g. `MIRROR_HOST`,
-`TARGET_BUCKET`, `TARGET_KIND`). `sync` talks to an abstract `MirrorTarget`:
-`--target s3` (minio / S3-compatible) or `--target local` (a plain directory
-tree with the same key layout) — handy for offline runs and previews.
+Use `--log-level` (or `-l`) with `DEBUG`, `INFO`, `WARNING`, `ERROR`,
+`CRITICAL`, or `NOTSET` to set operator-visible logging; the default is `INFO`.
+CLI values override non-empty environment variables, which override defaults.
+Important variables are `PACKAGES_INPUT_INDEX`, `LIBRARIES_INPUT_INDEX`,
+`MIRROR_HOST`, `TARGET_KIND`, `TARGET_BUCKET`, `TARGET_ENDPOINT`,
+`TARGET_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`ARCHITECTURES`, and `PACKAGES`. Archive bytes are held only in automatically
+cleaned temporary storage during publication.
 
-## Develop / test locally
+## Develop and test
 
-The project uses [uv](https://docs.astral.sh/uv). CI gates every push on
-`ruff` (lint + format) and `zuban`, plus the pytest suite — run them locally
-before pushing:
+The project uses [uv](https://docs.astral.sh/uv):
 
 ```bash
-uv sync --dev                                          # install package + dev deps
-uv run ruff check . && uv run ruff format --check .    # lint gate
-uv run zuban check .                                   # extra checks
-uv run pytest -q                                       # filtering, host rewrite, delete-safety
+uv sync --dev
+uv run pytest -m unit
+uv run pytest -m integration
+uv run pytest -m e2e
+uv run ruff check .
+uv run ruff format --check .
+uv run zuban check
+uv run lint-imports
+openspec validate --all --json
 ```
 
-Tests drive the pure logic (filter, host-rewrite, list-diff reconciliation)
-directly — no network, no S3 credentials. Use `--target local` to exercise the
-full `sync` path offline.
+The integration and end-to-end suites start a local HTTP origin and use a local
+target. Unit tests also validate the MinIO client key mapping without credentials.
 
-## Repo layout
+## Deployment
 
-```text
-src/arduino_mirror/
-  core.py     # pure logic: filter, host-rewrite, list-diff helpers
-  sync.py     # MirrorTarget abstraction + S3Target (minio) / LocalTarget
-  cli.py      # arduino-mirror entrypoint (manifest / sync / run)
-  __main__.py # `python -m arduino_mirror`
-.github/workflows/mirror.yml  # scheduled GHA job (lint/test -> manifest -> sync)
-tests/                      # unit tests + fixture index
-```
+The scheduled GitHub Actions workflows runs
+`arduino-mirror packages` and `arduino-mirror libraries`. Configure these
+repository secrets:
 
-## Secrets (repo → Settings → Secrets)
-
-| name | value |
-|---|---|
-| `TARGET_ENDPOINT` | Yandex S3 endpoint, e.g. `storage.yandexcloud.net` |
+| Name | Value |
+| --- | --- |
+| `TARGET_BUCKET` | S3 bucket name |
+| `TARGET_ENDPOINT` | S3 endpoint, for example `storage.yandexcloud.net` |
 | `TARGET_ACCESS_KEY_ID` | S3 access key |
 | `TARGET_SECRET_ACCESS_KEY` | S3 secret key |
-| `TARGET_BUCKET` | target bucket name |
 
-The bucket must allow **public read** (anonymous GET). `S3Target` also applies a
-`public-read` bucket policy on the managed prefix (best-effort).
-
-## Notes / gotchas
-
-- **Size:** the mirror covers six architectures (avr, samd, sam, megaavr,
-  mbed_nano, mbed_rp2040) with all their toolchain dependencies, plus the
-  `builtin` package's IDE tools (under `tools/`, `discovery/`, `monitor/`).
-  avr alone is ~270 MB (mostly `avr-gcc`); adding ARM-based cores (samd, sam,
-  mbed_*) pulls in `arm-none-eabi-gcc`, `bossac`, `openocd`, `rp2040tools`,
-  etc. Widen `ARCHITECTURES`/`PACKAGES` only if you accept the bandwidth +
-  storage cost.
-- **`builtin` is mirrored without an architecture filter.** It has no
-  platforms — only tool releases — so `--architectures` does not apply to it.
-  With `--latest-only` (the default), only the newest version of each builtin
-  tool name is kept; `--all-versions` keeps every release.
-- **Stale cleanup is directory-scoped.** Only keys under the top-level dirs the
-  mirror writes (`cores/`, `tools/`, `discovery/`, `monitor/`) are ever
-  deleted; root files and unrelated subdirectories are left untouched.
-- **Empty manifest aborts.** If the upstream index can't be fetched, `sync`
-  exits without touching the bucket.
+The bucket must allow anonymous read for clients to download published archives
+and indexes.
