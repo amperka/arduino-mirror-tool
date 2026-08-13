@@ -7,12 +7,12 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-06T12:46:40.495944701Z"
+exclude-newer = "2026-08-06T20:07:04.482182821Z"
 exclude-newer-span = "P7D"
 
 [[package]]
 name = "arduino-mirror"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "minio" },
