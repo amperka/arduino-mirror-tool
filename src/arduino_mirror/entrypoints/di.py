@@ -53,6 +53,7 @@ def make_publication_use_case(config: Config) -> PublishFamily:
                 root=config.local_root,
                 index_key=config.index_key,
                 prefix=config.prefix,
+                retry_policy=retry_policy,
             )
         case TargetKind.S3:
             target = S3PublicationTarget(

@@ -13,7 +13,12 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from arduino_mirror.domain import IndexFamily, PublicationCancellation, PublicationPlan
+from arduino_mirror.domain import (
+    ArchiveUnavailableError,
+    IndexFamily,
+    PublicationCancellation,
+    PublicationPlan,
+)
 
 __all__ = ["FixtureIndexSource", "RecordingPublicationTarget", "TargetArchiveError"]
 
@@ -59,6 +64,7 @@ class RecordingPublicationTarget:
 
     present_keys: tuple[str, ...] = ()
     fail_archives: bool = False
+    unavailable_archive_keys: set[str] = field(default_factory=set)
     operations: list[str] = field(default_factory=list)
     index_replaced: bool = False
 
@@ -82,8 +88,18 @@ class RecordingPublicationTarget:
         """Record archive publication or raise the configured failure."""
         cancellation.check()
         self.operations.append(f"{plan.family}:archives")
-        if self.fail_archives:
-            raise TargetArchiveError(plan.family)
+        unavailable = next(
+            (
+                archive
+                for archive in plan.archives_to_publish
+                if self.fail_archives or archive.key in self.unavailable_archive_keys
+            ),
+            None,
+        )
+        if unavailable is not None:
+            raise ArchiveUnavailableError(unavailable.key) from TargetArchiveError(
+                plan.family
+            )
 
     def replace_index(
         self, plan: PublicationPlan, *, cancellation: PublicationCancellation

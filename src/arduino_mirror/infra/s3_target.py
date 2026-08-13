@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 
 from minio import Minio
 
+from arduino_mirror.domain import ArchiveUnavailableError
+
 from .archive_tempfile import VerifiedArchive, download_verified
 from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_s3, retry_call
 
@@ -111,19 +113,24 @@ class S3PublicationTarget:
         """Upload every selected archive absent from or unverifiable in the S3 target."""
         for archive in plan.archives_to_publish:
             cancellation.check()
-            with download_verified(
-                archive,
-                self._timeout_seconds,
-                plan.family,
-                cancellation,
-            ) as verified:
+            try:
+                with download_verified(
+                    archive,
+                    self._timeout_seconds,
+                    plan.family,
+                    cancellation,
+                    retry_policy=self._retry_policy,
+                ) as verified:
+                    cancellation.check()
+                    retry_call(
+                        lambda a=archive, v=verified: self._put_archive(a, v),
+                        is_retriable=is_transient_s3,
+                        policy=self._retry_policy,
+                        cancellation=cancellation,
+                    )
+            except Exception as error:
                 cancellation.check()
-                retry_call(
-                    lambda a=archive, v=verified: self._put_archive(a, v),
-                    is_retriable=is_transient_s3,
-                    policy=self._retry_policy,
-                    cancellation=cancellation,
-                )
+                raise ArchiveUnavailableError(archive.key) from error
             logger.info("Published %s", archive.key)
         logger.debug(
             "TARGET_ARCHIVES_PUBLISHED",

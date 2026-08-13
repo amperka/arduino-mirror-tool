@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
-__all__ = ["Archive", "IndexFamily", "PublicationPlan"]
+__all__ = ["Archive", "ArchiveUnavailableError", "IndexFamily", "PublicationPlan"]
 
 
 # region CLASS_IndexFamily
@@ -52,6 +52,20 @@ class Archive:
 
 
 # endregion CLASS_Archive
+
+
+# region CLASS_ArchiveUnavailableError
+# PURPOSE: Identify one archive that a target could not make available so the application can safely select an older release.
+class ArchiveUnavailableError(RuntimeError):
+    """A selected archive failed download, verification, or target publication."""
+
+    def __init__(self, archive_key: str) -> None:
+        """Describe the unavailable family-owned archive key without leaking transport details."""
+        self.archive_key = archive_key
+        super().__init__(f"archive unavailable: {archive_key}")
+
+
+# endregion CLASS_ArchiveUnavailableError
 
 
 # region CLASS_PublicationPlan

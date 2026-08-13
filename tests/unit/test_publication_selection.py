@@ -28,7 +28,6 @@ from arduino_mirror.entrypoints.signals import PublicationCancelledError
 from tests.doubles import (
     FixtureIndexSource,
     RecordingPublicationTarget,
-    TargetArchiveError,
 )
 from tests.log_assertions import extra_fields
 
@@ -250,6 +249,209 @@ def test_external_releases_bypass_origin_latest_selection_and_rewrite() -> None:
 # endregion FUNC_test_external_releases_bypass_origin_latest_selection_and_rewrite
 
 
+# region FUNC_test_library_selection_falls_back_to_previous_available_release
+# PURPOSE: Verify an excluded latest library archive selects the newest older mirrorable release.
+def test_library_selection_falls_back_to_previous_available_release() -> None:
+    """An unavailable latest archive does not hide the previous available library release."""
+    policy = LatestLibrariesPolicy(
+        mirror_host="https://mirror.test.invalid",
+        origin_host="https://downloads.arduino.test",
+    )
+
+    plan = policy.select(
+        {
+            "libraries": [
+                {
+                    "name": "Example",
+                    "version": "1.0.0",
+                    "url": "https://downloads.arduino.test/Example-1.0.0.zip",
+                },
+                {
+                    "name": "Example",
+                    "version": "1.1.0",
+                    "url": "https://downloads.arduino.test/Example-1.1.0.zip",
+                },
+            ]
+        },
+        unavailable_archive_keys=frozenset({"l/Example-1.1.0.zip"}),
+    )
+
+    assert plan.releases == ("Example@1.0.0",)
+    assert plan.archive_keys == ("l/Example-1.0.0.zip",)
+
+
+# endregion FUNC_test_library_selection_falls_back_to_previous_available_release
+
+
+# region FUNC_test_package_selection_falls_back_to_previous_available_platform
+# PURPOSE: Verify an excluded latest platform archive selects the newest older platform for its architecture.
+def test_package_selection_falls_back_to_previous_available_platform() -> None:
+    """An unavailable latest platform archive does not hide its previous available platform release."""
+    policy = LatestPackagesPolicy(
+        mirror_host="https://mirror.test.invalid",
+        origin_host="https://downloads.arduino.test",
+        architectures=("avr",),
+        package_names=("arduino",),
+    )
+
+    plan = policy.select(
+        {
+            "packages": [
+                {
+                    "name": "arduino",
+                    "platforms": [
+                        {
+                            "architecture": "avr",
+                            "version": "1.0.0",
+                            "url": "https://downloads.arduino.test/cores/avr-1.0.0.tar.bz2",
+                        },
+                        {
+                            "architecture": "avr",
+                            "version": "1.1.0",
+                            "url": "https://downloads.arduino.test/cores/avr-1.1.0.tar.bz2",
+                        },
+                    ],
+                    "tools": [],
+                }
+            ]
+        },
+        unavailable_archive_keys=frozenset({"p/cores/avr-1.1.0.tar.bz2"}),
+    )
+
+    assert plan.releases == ("arduino:avr@1.0.0",)
+    assert plan.archive_keys == ("p/cores/avr-1.0.0.tar.bz2",)
+
+
+# endregion FUNC_test_package_selection_falls_back_to_previous_available_platform
+
+
+# region FUNC_test_package_selection_falls_back_when_required_tool_is_unavailable
+# PURPOSE: Verify a failed required tool archive selects an older platform that depends on an available tool version.
+def test_package_selection_falls_back_when_required_tool_is_unavailable() -> None:
+    """A platform whose required tool cannot publish is replaced by an older compatible platform."""
+    policy = LatestPackagesPolicy(
+        mirror_host="https://mirror.test.invalid",
+        origin_host="https://downloads.arduino.test",
+        architectures=("avr",),
+        package_names=("arduino",),
+    )
+
+    plan = policy.select(
+        {
+            "packages": [
+                {
+                    "name": "arduino",
+                    "platforms": [
+                        {
+                            "architecture": "avr",
+                            "version": "1.0.0",
+                            "url": "https://downloads.arduino.test/cores/avr-1.0.0.tar.bz2",
+                            "toolsDependencies": [
+                                {
+                                    "packager": "arduino",
+                                    "name": "tool",
+                                    "version": "1.0",
+                                }
+                            ],
+                        },
+                        {
+                            "architecture": "avr",
+                            "version": "1.1.0",
+                            "url": "https://downloads.arduino.test/cores/avr-1.1.0.tar.bz2",
+                            "toolsDependencies": [
+                                {
+                                    "packager": "arduino",
+                                    "name": "tool",
+                                    "version": "1.1",
+                                }
+                            ],
+                        },
+                    ],
+                    "tools": [
+                        {
+                            "name": "tool",
+                            "version": "1.0",
+                            "systems": [
+                                {
+                                    "url": "https://downloads.arduino.test/tools/tool-1.0.zip"
+                                }
+                            ],
+                        },
+                        {
+                            "name": "tool",
+                            "version": "1.1",
+                            "systems": [
+                                {
+                                    "url": "https://downloads.arduino.test/tools/tool-1.1.zip"
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ]
+        },
+        unavailable_archive_keys=frozenset({"p/tools/tool-1.1.zip"}),
+    )
+
+    assert plan.releases == ("arduino:avr@1.0.0",)
+    assert plan.archive_keys == (
+        "p/cores/avr-1.0.0.tar.bz2",
+        "p/tools/tool-1.0.zip",
+    )
+
+
+# endregion FUNC_test_package_selection_falls_back_when_required_tool_is_unavailable
+
+
+# region FUNC_test_publication_replans_after_unavailable_archive
+# PURPOSE: Verify an archive-specific target failure re-plans and publishes the newest older available library release.
+def test_publication_replans_after_unavailable_archive() -> None:
+    """The first unavailable archive causes a fallback plan rather than aborting the family."""
+    target = RecordingPublicationTarget(
+        unavailable_archive_keys={"l/Example-1.1.0.zip"}
+    )
+    use_case = PublishFamily(
+        source=FixtureIndexSource(
+            family=IndexFamily.LIBRARIES,
+            raw_index={
+                "libraries": [
+                    {
+                        "name": "Example",
+                        "version": "1.0.0",
+                        "url": "https://downloads.arduino.test/Example-1.0.0.zip",
+                    },
+                    {
+                        "name": "Example",
+                        "version": "1.1.0",
+                        "url": "https://downloads.arduino.test/Example-1.1.0.zip",
+                    },
+                ]
+            },
+        ),
+        selection=LatestLibrariesPolicy(
+            mirror_host="https://mirror.test.invalid",
+            origin_host="https://downloads.arduino.test",
+        ),
+        target=target,
+    )
+
+    plan = use_case.run(IndexFamily.LIBRARIES)
+
+    assert plan.releases == ("Example@1.0.0",)
+    assert target.operations == [
+        "libraries:list",
+        "libraries:archives",
+        "libraries:list",
+        "libraries:archives",
+        "libraries:index",
+        "libraries:cleanup",
+    ]
+    assert target.index_replaced is True
+
+
+# endregion FUNC_test_publication_replans_after_unavailable_archive
+
+
 # region FUNC_test_dry_run_builds_plan_without_target_interaction
 # PURPOSE: Prove dry run reports transformed work without reading or mutating target state.
 def test_dry_run_builds_plan_without_target_interaction() -> None:
@@ -388,8 +590,10 @@ def test_configuration_rejects_incomplete_s3_settings() -> None:
 
 # region FUNC_test_archive_failure_preserves_index_and_does_not_start_other_family
 # PURPOSE: Demonstrate a library failure stops before index replacement and leaves the independent package pipeline untouched.
-def test_archive_failure_preserves_index_and_does_not_start_other_family() -> None:
-    """A failed library archive boundary does not replace an index or run packages."""
+def test_exhausted_archive_candidates_preserve_index_and_do_not_start_other_family() -> (
+    None
+):
+    """An unavailable sole library release leaves the current index intact without running packages."""
     config = make_config(IndexFamily.LIBRARIES)
     target = RecordingPublicationTarget(fail_archives=True)
     use_case = PublishFamily(
@@ -411,14 +615,14 @@ def test_archive_failure_preserves_index_and_does_not_start_other_family() -> No
         target=target,
     )
 
-    with pytest.raises(TargetArchiveError):
-        use_case.run(IndexFamily.LIBRARIES)
+    plan = use_case.run(IndexFamily.LIBRARIES)
 
+    assert plan.archives == ()
     assert target.operations == ["libraries:list", "libraries:archives"]
     assert target.index_replaced is False
 
 
-# endregion FUNC_test_archive_failure_preserves_index_and_does_not_start_other_family
+# endregion FUNC_test_exhausted_archive_candidates_preserve_index_and_do_not_start_other_family
 
 
 # region FUNC_test_cancellation_after_archive_boundary_skips_index_and_cleanup

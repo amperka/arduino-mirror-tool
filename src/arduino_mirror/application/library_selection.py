@@ -37,12 +37,23 @@ class LatestLibrariesPolicy:
 
     # region METHOD_select
     # PURPOSE: Transform latest origin-host Library Manager releases into a library-only publication plan.
-    def select(self, raw_index: dict[str, object]) -> PublicationPlan:
-        """Select the latest SemVer-compatible release for each exact library name."""
+    def select(
+        self,
+        raw_index: dict[str, object],
+        *,
+        unavailable_archive_keys: frozenset[str] = frozenset(),
+    ) -> PublicationPlan:
+        """Select the latest available SemVer-compatible release for each exact library name."""
         origin_libraries = [
             library
             for library in dict_list(raw_index.get("libraries"))
             if origin_relative_path(library.get("url"), self.origin_host) is not None
+            and _archive_is_available(
+                library,
+                mirror_host=self.mirror_host,
+                origin_host=self.origin_host,
+                unavailable_archive_keys=unavailable_archive_keys,
+            )
         ]
         external_libraries = [
             library
@@ -94,6 +105,28 @@ class LatestLibrariesPolicy:
 
 
 # endregion CLASS_LatestLibrariesPolicy
+
+
+# region FUNC__archive_is_available
+# PURPOSE: Exclude one origin record only when it requires an archive already proven unavailable in this publication run.
+def _archive_is_available(
+    record: dict[str, Any],
+    *,
+    mirror_host: str,
+    origin_host: str,
+    unavailable_archive_keys: frozenset[str],
+) -> bool:
+    """Return whether the record's mirror archive key has not failed this run."""
+    _, keys, _ = transform_archive_record(
+        IndexFamily.LIBRARIES,
+        record,
+        mirror_host=mirror_host,
+        origin_host=origin_host,
+    )
+    return not keys.intersection(unavailable_archive_keys)
+
+
+# endregion FUNC__archive_is_available
 
 
 # region FUNC__version_key

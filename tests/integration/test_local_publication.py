@@ -28,7 +28,6 @@ from arduino_mirror.domain import IndexFamily
 from arduino_mirror.entrypoints.cli import run_publication
 from arduino_mirror.entrypoints.config import Config
 from arduino_mirror.entrypoints.signals import PublicationCancelledError
-from arduino_mirror.infra import ArchiveVerificationError
 from tests.log_assertions import extra_fields
 
 
@@ -222,11 +221,11 @@ def test_local_publication_skips_matching_archive(
 
 
 # region FUNC_test_invalid_archive_does_not_replace_index
-# PURPOSE: Verify failed supplied integrity metadata prevents both archive exposure and family-index replacement.
+# PURPOSE: Verify failed supplied integrity metadata excludes the archive and preserves the current family index when no fallback exists.
 def test_invalid_archive_does_not_replace_index(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A size mismatch leaves the local family index absent."""
+    """A size mismatch leaves the local family index absent after safely exhausting candidates."""
     caplog.set_level(logging.DEBUG, logger="arduino_mirror")
     source = tmp_path / "source"
     source.mkdir()
@@ -249,18 +248,28 @@ def test_invalid_archive_does_not_replace_index(
             ),
             encoding="utf-8",
         )
-        with pytest.raises(ArchiveVerificationError, match="size mismatch"):
-            run_publication(_config(f"{origin}/library_index.json", target))
+        plan = run_publication(_config(f"{origin}/library_index.json", target))
 
+    assert plan.archives == ()
     assert not (target / "l" / "broken.zip").exists()
     assert not (target / "l" / "library_index.json").exists()
-    assert [record.getMessage() for record in caplog.records][-2:] == [
-        "ARCHIVE_DOWNLOAD_STARTED",
-        "ARCHIVE_VERIFICATION_FAILED",
-    ]
-    assert extra_fields(caplog.records[-1]) == {
+    verification = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "ARCHIVE_VERIFICATION_FAILED"
+    )
+    assert extra_fields(verification) == {
         "archive_key": "l/broken.zip",
         "check": "size",
+        "family": IndexFamily.LIBRARIES,
+    }
+    fallback = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "ARCHIVE_FALLBACK_SELECTED"
+    )
+    assert extra_fields(fallback) == {
+        "archive_key": "l/broken.zip",
         "family": IndexFamily.LIBRARIES,
     }
 

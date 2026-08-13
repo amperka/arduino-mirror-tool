@@ -45,8 +45,13 @@ class IndexSource(Protocol):
 class SelectionPolicy(Protocol):
     """Create a family-scoped publication plan from raw index data."""
 
-    def select(self, raw_index: dict[str, object]) -> PublicationPlan:
-        """Return the selected publication plan."""
+    def select(
+        self,
+        raw_index: dict[str, object],
+        *,
+        unavailable_archive_keys: frozenset[str] = frozenset(),
+    ) -> PublicationPlan:
+        """Return the selected plan, excluding candidates that require unavailable archives."""
 
 
 # endregion CLASS_SelectionPolicy

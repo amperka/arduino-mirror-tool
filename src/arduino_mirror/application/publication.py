@@ -16,6 +16,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from arduino_mirror.domain import ArchiveUnavailableError
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from contextlib import AbstractContextManager
@@ -58,46 +60,7 @@ class PublishFamily:
         raw_index = self.source.fetch(family)
         check()
         logger.debug("SOURCE_FETCHED", extra={"family": family})
-
-        selected = self.selection.select(raw_index)
-        if selected.family is not family:
-            msg = f"selection returned {selected.family} for {family}"
-            raise ValueError(msg)
-        logger.info(
-            "Selected %s %s release(s), %s archive(s)",
-            len(selected.releases),
-            family.value,
-            len(selected.archives),
-        )
-        logger.debug(
-            "PLAN_SELECTED",
-            extra={
-                "archive_count": len(selected.archives),
-                "family": family,
-                "release_count": len(selected.releases),
-            },
-        )
-
-        if not selected.archives:
-            logger.debug(
-                "PLAN_EMPTY",
-                extra={"family": family, "release_count": len(selected.releases)},
-            )
-            return selected
-
-        check()
-        plan = self.target.reconcile(selected)
-        check()
-        logger.info("Found %s stale %s archive(s)", len(plan.stale_keys), family.value)
-        logger.debug(
-            "STALE_PLANNED",
-            extra={
-                "family": family,
-                "stale_count": len(plan.stale_keys),
-                "to_publish_count": len(plan.archives_to_publish),
-            },
-        )
-        return plan
+        return self._plan_from_raw(family, raw_index, check=check)
 
     # endregion METHOD_plan
 
@@ -154,35 +117,119 @@ class PublishFamily:
     ) -> PublicationPlan:
         """Run one safe family publication."""
         controller = cancellation or _CallableCancellation(check_cancelled or _continue)
-        plan = self.plan(family, check_cancelled=controller.check)
-        if not plan.archives:
-            logger.warning(
-                "Skipped %s publication: no origin archives selected", family.value
+        controller.check()
+        raw_index = self.source.fetch(family)
+        controller.check()
+        logger.debug("SOURCE_FETCHED", extra={"family": family})
+        unavailable_archive_keys = frozenset[str]()
+        while True:
+            plan = self._plan_from_raw(
+                family,
+                raw_index,
+                check=controller.check,
+                unavailable_archive_keys=unavailable_archive_keys,
             )
-            logger.debug("PUBLICATION_SKIPPED_EMPTY", extra={"family": family})
+            if not plan.archives:
+                logger.warning(
+                    "Skipped %s publication: no origin archives selected", family.value
+                )
+                logger.debug("PUBLICATION_SKIPPED_EMPTY", extra={"family": family})
+                return plan
+
+            controller.check()
+            try:
+                self.target.publish_archives(plan, cancellation=controller)
+            except ArchiveUnavailableError as error:
+                if error.archive_key in unavailable_archive_keys:
+                    raise
+                unavailable_archive_keys = unavailable_archive_keys | frozenset(
+                    {error.archive_key}
+                )
+                logger.warning(
+                    "Archive unavailable, selecting an older release: %s",
+                    error.archive_key,
+                )
+                logger.debug(
+                    "ARCHIVE_FALLBACK_SELECTED",
+                    extra={"archive_key": error.archive_key, "family": family},
+                )
+                continue
+            controller.check()
+            logger.debug(
+                "ARCHIVES_PUBLISHED",
+                extra={
+                    "archive_count": len(plan.archives_to_publish),
+                    "family": family,
+                },
+            )
+
+            self.target.replace_index(plan, cancellation=controller)
+            controller.check()
+            logger.debug("INDEX_REPLACED", extra={"family": family})
+
+            self.target.cleanup_stale(plan, cancellation=controller)
+            controller.check()
+            logger.debug(
+                "STALE_CLEANED",
+                extra={"family": family, "stale_count": len(plan.stale_keys)},
+            )
             return plan
 
-        controller.check()
-        self.target.publish_archives(plan, cancellation=controller)
-        controller.check()
-        logger.debug(
-            "ARCHIVES_PUBLISHED",
-            extra={"archive_count": len(plan.archives_to_publish), "family": family},
+    # endregion METHOD_run
+
+    # region METHOD__plan_from_raw
+    # PURPOSE: Select and reconcile one source snapshot while excluding archives already proven unavailable in this run.
+    def _plan_from_raw(
+        self,
+        family: IndexFamily,
+        raw_index: dict[str, object],
+        *,
+        check: Callable[[], None],
+        unavailable_archive_keys: frozenset[str] = frozenset(),
+    ) -> PublicationPlan:
+        """Return a reconciled plan for the supplied source snapshot and availability exclusions."""
+        selected = self.selection.select(
+            raw_index,
+            unavailable_archive_keys=unavailable_archive_keys,
         )
-
-        self.target.replace_index(plan, cancellation=controller)
-        controller.check()
-        logger.debug("INDEX_REPLACED", extra={"family": family})
-
-        self.target.cleanup_stale(plan, cancellation=controller)
-        controller.check()
+        if selected.family is not family:
+            msg = f"selection returned {selected.family} for {family}"
+            raise ValueError(msg)
+        logger.info(
+            "Selected %s %s release(s), %s archive(s)",
+            len(selected.releases),
+            family.value,
+            len(selected.archives),
+        )
         logger.debug(
-            "STALE_CLEANED",
-            extra={"family": family, "stale_count": len(plan.stale_keys)},
+            "PLAN_SELECTED",
+            extra={
+                "archive_count": len(selected.archives),
+                "family": family,
+                "release_count": len(selected.releases),
+            },
+        )
+        if not selected.archives:
+            logger.debug(
+                "PLAN_EMPTY",
+                extra={"family": family, "release_count": len(selected.releases)},
+            )
+            return selected
+        check()
+        plan = self.target.reconcile(selected)
+        check()
+        logger.info("Found %s stale %s archive(s)", len(plan.stale_keys), family.value)
+        logger.debug(
+            "STALE_PLANNED",
+            extra={
+                "family": family,
+                "stale_count": len(plan.stale_keys),
+                "to_publish_count": len(plan.archives_to_publish),
+            },
         )
         return plan
 
-    # endregion METHOD_run
+    # endregion METHOD__plan_from_raw
 
 
 def _continue() -> None:

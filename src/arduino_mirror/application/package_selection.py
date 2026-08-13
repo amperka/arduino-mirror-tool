@@ -40,9 +40,20 @@ class LatestPackagesPolicy:
 
     # region METHOD_select
     # PURPOSE: Transform configured Boards Manager releases into a package-only publication plan.
-    def select(self, raw_index: dict[str, object]) -> PublicationPlan:  # noqa: PLR0912, PLR0915
-        """Select filtered latest platforms and tool releases from a package index."""
+    def select(  # noqa: PLR0912, PLR0915
+        self,
+        raw_index: dict[str, object],
+        *,
+        unavailable_archive_keys: frozenset[str] = frozenset(),
+    ) -> PublicationPlan:
+        """Select filtered latest available platforms and tool releases from a package index."""
         packages = dict_list(raw_index.get("packages"))
+        unavailable_tools = _unavailable_tools(
+            packages,
+            mirror_host=self.mirror_host,
+            origin_host=self.origin_host,
+            unavailable_archive_keys=unavailable_archive_keys,
+        )
         retained: dict[str, dict[str, Any]] = {}
         tools_needed: set[tuple[str, str, str]] = set()
         archive_keys: set[str] = set()
@@ -60,7 +71,18 @@ class LatestPackagesPolicy:
             output["tools"] = []
             retained[name] = output
             if not platforms:
-                for tool in _latest_by_name(dict_list(package.get("tools"))):
+                for tool in _latest_by_name(
+                    [
+                        tool
+                        for tool in dict_list(package.get("tools"))
+                        if _tool_is_available(
+                            tool,
+                            mirror_host=self.mirror_host,
+                            origin_host=self.origin_host,
+                            unavailable_archive_keys=unavailable_archive_keys,
+                        )
+                    ]
+                ):
                     tool_name = tool.get("name")
                     tool_version = tool.get("version")
                     if isinstance(tool_name, str) and isinstance(tool_version, str):
@@ -70,6 +92,13 @@ class LatestPackagesPolicy:
                 platform
                 for platform in platforms
                 if platform.get("architecture") in self.architectures
+                and _platform_is_available(
+                    platform,
+                    mirror_host=self.mirror_host,
+                    origin_host=self.origin_host,
+                    unavailable_archive_keys=unavailable_archive_keys,
+                    unavailable_tools=unavailable_tools,
+                )
             ]
             selected_platforms = _latest_by_name(
                 [
@@ -122,6 +151,12 @@ class LatestPackagesPolicy:
                 tool
                 for tool in dict_list(package.get("tools"))
                 if (package_name, tool.get("name"), tool.get("version")) in tools_needed
+                and _tool_is_available(
+                    tool,
+                    mirror_host=self.mirror_host,
+                    origin_host=self.origin_host,
+                    unavailable_archive_keys=unavailable_archive_keys,
+                )
             ]
             if not selected_tools:
                 continue
@@ -155,6 +190,100 @@ class LatestPackagesPolicy:
 
 
 # endregion CLASS_LatestPackagesPolicy
+
+
+# region FUNC__platform_is_available
+# PURPOSE: Reject an origin platform when its own archive or an exact required tool archive is unavailable.
+def _platform_is_available(
+    platform: dict[str, Any],
+    *,
+    mirror_host: str,
+    origin_host: str,
+    unavailable_archive_keys: frozenset[str],
+    unavailable_tools: frozenset[tuple[str, str, str]],
+) -> bool:
+    """Return whether the platform can be published with all required known tool archives."""
+    _, keys, _ = transform_archive_record(
+        IndexFamily.PACKAGES,
+        platform,
+        mirror_host=mirror_host,
+        origin_host=origin_host,
+    )
+    if keys.intersection(unavailable_archive_keys):
+        return False
+    return all(
+        not (
+            isinstance(dependency.get("packager"), str)
+            and isinstance(dependency.get("name"), str)
+            and isinstance(dependency.get("version"), str)
+            and (
+                dependency["packager"],
+                dependency["name"],
+                dependency["version"],
+            )
+            in unavailable_tools
+        )
+        for dependency in dict_list(platform.get("toolsDependencies"))
+    )
+
+
+# endregion FUNC__platform_is_available
+
+
+# region FUNC__tool_is_available
+# PURPOSE: Reject a tool record when any origin system archive in that exact version is unavailable.
+def _tool_is_available(
+    tool: dict[str, Any],
+    *,
+    mirror_host: str,
+    origin_host: str,
+    unavailable_archive_keys: frozenset[str],
+) -> bool:
+    """Return whether every origin system archive of one tool remains available."""
+    _, keys, _ = transform_tool(
+        tool,
+        mirror_host=mirror_host,
+        origin_host=origin_host,
+    )
+    return not keys.intersection(unavailable_archive_keys)
+
+
+# endregion FUNC__tool_is_available
+
+
+# region FUNC__unavailable_tools
+# PURPOSE: Map a failed tool archive to every platform dependency that requires its exact tool version.
+def _unavailable_tools(
+    packages: list[dict[str, Any]],
+    *,
+    mirror_host: str,
+    origin_host: str,
+    unavailable_archive_keys: frozenset[str],
+) -> frozenset[tuple[str, str, str]]:
+    """Return exact package, tool, and version identities with a failed origin system archive."""
+    unavailable: set[tuple[str, str, str]] = set()
+    for package in packages:
+        package_name = package.get("name")
+        if not isinstance(package_name, str):
+            continue
+        for tool in dict_list(package.get("tools")):
+            tool_name = tool.get("name")
+            version = tool.get("version")
+            if (
+                isinstance(tool_name, str)
+                and isinstance(version, str)
+                and not _tool_is_available(
+                    tool,
+                    mirror_host=mirror_host,
+                    origin_host=origin_host,
+                    unavailable_archive_keys=unavailable_archive_keys,
+                )
+            ):
+                unavailable.add((package_name, tool_name, version))
+    return frozenset(unavailable)
+
+
+# endregion FUNC__unavailable_tools
 
 
 # region FUNC__latest_by_name

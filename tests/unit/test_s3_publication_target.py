@@ -20,7 +20,12 @@ from unittest.mock import ANY
 import pytest
 from minio.error import S3Error
 
-from arduino_mirror.domain import Archive, IndexFamily, PublicationPlan
+from arduino_mirror.domain import (
+    Archive,
+    ArchiveUnavailableError,
+    IndexFamily,
+    PublicationPlan,
+)
 from arduino_mirror.infra.archive_tempfile import VerifiedArchive
 from arduino_mirror.infra.retry import RetryPolicy
 from arduino_mirror.infra.s3_target import S3PublicationTarget
@@ -84,7 +89,7 @@ class FakeMinio:
 # region FUNC__verified_archive
 # PURPOSE: Supply deterministic verified archive bytes to the S3 adapter without HTTP or filesystem I/O.
 @contextmanager
-def _verified_archive(*_: object):
+def _verified_archive(*_: object, **__: object):
     """Yield deterministic archive bytes through the temporary-stream contract."""
     with io.BytesIO(b"archive") as stream:
         yield VerifiedArchive(stream=stream, size=len(stream.getvalue()))
@@ -285,3 +290,47 @@ def test_s3_target_retries_transient_put_then_succeeds(monkeypatch) -> None:
 
 
 # endregion FUNC_test_s3_target_retries_transient_put_then_succeeds
+
+
+# region FUNC_test_s3_target_identifies_unavailable_archive
+# PURPOSE: Verify a terminal archive upload failure identifies only its logical key for application fallback.
+def test_s3_target_identifies_unavailable_archive(monkeypatch) -> None:
+    """A non-retriable upload error becomes an archive-specific availability failure."""
+
+    class PermanentFailureMinio(FakeMinio):
+        def put_object(self, *args: Any, **kwargs: Any) -> None:
+            raise ValueError("storage rejected archive")
+
+    FakeMinio.instances.clear()
+    monkeypatch.setattr("arduino_mirror.infra.s3_target.Minio", PermanentFailureMinio)
+    monkeypatch.setattr(
+        "arduino_mirror.infra.s3_target.download_verified", _verified_archive
+    )
+    target = S3PublicationTarget(
+        bucket="mirror",
+        access_key="access",
+        secret_key="secret",
+        index_key="l/libraries/library_index.json",
+        prefix="managed",
+    )
+    plan = PublicationPlan(
+        family=IndexFamily.LIBRARIES,
+        releases=("Servo@1.0.0",),
+        archives=(
+            Archive(
+                key="l/Servo-1.0.0.zip",
+                source_url="https://origin.test.invalid/Servo-1.0.0.zip",
+            ),
+        ),
+        index={"libraries": []},
+    )
+
+    reconciled = target.reconcile(plan)
+
+    with pytest.raises(ArchiveUnavailableError) as error:
+        target.publish_archives(reconciled, cancellation=_NO_CANCELLATION)
+
+    assert error.value.archive_key == "l/Servo-1.0.0.zip"
+
+
+# endregion FUNC_test_s3_target_identifies_unavailable_archive

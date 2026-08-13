@@ -19,7 +19,10 @@ from pathlib import Path
 from shutil import copyfileobj
 from typing import TYPE_CHECKING, Any
 
+from arduino_mirror.domain import ArchiveUnavailableError
+
 from .archive_tempfile import download_verified, is_file_verified
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy
 
 if TYPE_CHECKING:
     from arduino_mirror.domain import PublicationCancellation, PublicationPlan
@@ -39,6 +42,7 @@ class LocalPublicationTarget:
     index_key: str
     prefix: str = ""
     timeout_seconds: float = 600.0
+    retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY
 
     # region METHOD_reconcile
     # PURPOSE: Build stale and pending archive work from one family directory scan before publication mutates the target.
@@ -84,14 +88,22 @@ class LocalPublicationTarget:
         """Publish every selected archive absent from or unverifiable in the local target."""
         for archive in plan.archives_to_publish:
             cancellation.check()
-            destination = self._path(archive.key)
-            with download_verified(
-                archive, self.timeout_seconds, plan.family, cancellation
-            ) as verified:
+            try:
+                destination = self._path(archive.key)
+                with download_verified(
+                    archive,
+                    self.timeout_seconds,
+                    plan.family,
+                    cancellation,
+                    retry_policy=self.retry_policy,
+                ) as verified:
+                    cancellation.check()
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with destination.open("wb") as file:
+                        copyfileobj(verified.stream, file)
+            except Exception as error:
                 cancellation.check()
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                with destination.open("wb") as file:
-                    copyfileobj(verified.stream, file)
+                raise ArchiveUnavailableError(archive.key) from error
             logger.info("Published %s", archive.key)
         logger.debug(
             "TARGET_ARCHIVES_PUBLISHED",
