@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove an operator can run the CLI against an HTTP source and obtain a published Library Manager index and archive in a local target.
-# SCOPE: One complete publication libraries command with a temporary HTTP origin and local target.
+# SCOPE:
+# - One complete publication libraries command with a temporary HTTP origin and local target.
+# - NOT: Unit-level policy behavior or production implementation.
 # KEYWORDS: e2e test, publication CLI, libraries, local target
 # endregion MODULE_CONTRACT
 

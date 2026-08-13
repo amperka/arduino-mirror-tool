@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove fixture-backed test doubles preserve independent publication, transformation, and configuration contracts.
-# SCOPE: Pure selection, transformed indexes, recorded boundaries, failure isolation, configuration precedence, dry run, and trace records.
+# SCOPE:
+# - Pure selection, transformed indexes, recorded boundaries, failure isolation, configuration precedence, dry run, and trace records.
+# - NOT: Real HTTP, filesystem, or S3 interactions.
 # KEYWORDS: unit test, test double, publication, selection, configuration, logging
 # endregion MODULE_CONTRACT
 

@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Auto-mark all collected tests in this directory as "unit".
-# SCOPE: pytest_collection_modifyitems hook, autouse cache-isolation fixture.
+# SCOPE:
+# - pytest_collection_modifyitems hook, autouse cache-isolation fixture.
+# - NOT: Fixture behavior or production code.
 # KEYWORDS: pytest auto-mark, unit tests, cache isolation
 # endregion MODULE_CONTRACT
 

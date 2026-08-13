@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Stream, verify, and temporarily retain selected origin archives until a target has safely published their bytes.
-# SCOPE: Streamed HTTP download, in-memory-to-disk spooling, SHA-256 and declared-size validation, and temporary-resource cleanup.
-# NOT: Index retrieval, selection, or storage publication.
+# SCOPE:
+# - Streamed HTTP download, in-memory-to-disk spooling, SHA-256 and declared-size validation, and temporary-resource cleanup.
+# - NOT: Index retrieval, selection, or storage publication.
 # INVARIANTS: A verified archive is available only inside its context manager; closing the context removes any spooled temporary file.
 # KEYWORDS: archive, temporary file, spool, checksum, HTTP
 # endregion MODULE_CONTRACT

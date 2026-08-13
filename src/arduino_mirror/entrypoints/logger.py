@@ -1,7 +1,9 @@
 """Process-wide logger setup for entry points."""
 # region MODULE_CONTRACT
 # PURPOSE: Centralize ROOT-logger configuration for every entry point.
-# SCOPE: Only logger configuration
+# SCOPE:
+# - Only logger configuration
+# - NOT: CLI parsing, application logging calls, or log-record formatting rules.
 # INVARIANTS:
 # - configure_logger wires ONE shared LogFormatter instance onto both handlers (the timestamp flag is identical on both)
 # - helpers call logging.captureWarnings(True)

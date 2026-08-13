@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Verify the S3-compatible target maps logical family keys to the documented MinIO client operations without a real storage service.
-# SCOPE: Prefix-scoped list, upload, index replacement, and stale cleanup calls.
+# SCOPE:
+# - Prefix-scoped list, upload, index replacement, and stale cleanup calls.
+# - NOT: A real S3 service or application orchestration.
 # KEYWORDS: unit test, S3, MinIO, publication target
 # endregion MODULE_CONTRACT
 

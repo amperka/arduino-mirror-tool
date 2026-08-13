@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Shared helpers for log-driven test assertions against the stdlib `debug(msg, extra=...)` trace contract.
-# SCOPE: extra_fields(rec) — reconstruct the structured trace fields dict from a LogRecord by diffing its attributes against the introspection-derived native LogRecord attribute set.
+# SCOPE:
+# - extra_fields(rec) — reconstruct the structured trace fields dict from a LogRecord by diffing its attributes against the introspection-derived native LogRecord attribute set.
+# - NOT: Logger configuration or emission behavior.
 # KEYWORDS: log-driven assertions, extra_fields, LogRecord structured data
 # endregion MODULE_CONTRACT
 

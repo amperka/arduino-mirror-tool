@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove CLI logging-level input maps only standard operator-facing names to stdlib thresholds.
-# SCOPE: Parser acceptance and rejection for --log-level.
+# SCOPE:
+# - Parser acceptance and rejection for --log-level.
+# - NOT: Publication execution or logger formatting behavior.
 # KEYWORDS: CLI, logging, argument parsing
 # endregion MODULE_CONTRACT
 

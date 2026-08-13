@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Publish one family to an S3-compatible bucket through the MinIO client.
-# SCOPE: One-pass family-scoped reconciliation, archive upload, index replacement, and stale cleanup.
-# NOT: HTTP retrieval, selection, local filesystem targets, or CLI parsing.
+# SCOPE:
+# - One-pass family-scoped reconciliation, archive upload, index replacement, and stale cleanup.
+# - NOT: HTTP retrieval, selection, local filesystem targets, or CLI parsing.
 # KEYWORDS: S3, MinIO, target, publication
 # endregion MODULE_CONTRACT
 

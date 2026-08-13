@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Supply deterministic source and target doubles for publication use-case tests without external I/O.
-# SCOPE: Fixture source, recording target, and configured archive failure.
-# NOT: Selection rules, HTTP, filesystem, or S3 implementations.
+# SCOPE:
+# - Fixture source, recording target, and configured archive failure.
+# - NOT: Selection rules, HTTP, filesystem, or S3 implementations.
 # KEYWORDS: test double, fixture source, recording target, publication
 # endregion MODULE_CONTRACT
 

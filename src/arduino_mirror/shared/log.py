@@ -1,7 +1,9 @@
 """LogFormatter with extra-diff trace discriminator for stdlib structured DEBUG tracing."""
 # region MODULE_CONTRACT
 # PURPOSE: Make internal trace flow observable via structured DEBUG logs without polluting user-facing output.
-# SCOPE: LogFormatter only
+# SCOPE:
+# - LogFormatter only
+# - NOT: Logger configuration, application policy, or storage I/O.
 # INVARIANTS:
 # - every `extra={...}` callsite uses flat user-supplied keys — no nested sentinel container such as `extra={"trace": {...}}`
 # - every `extra={...}` callsite uses keys that do NOT collide with native `LogRecord` attribute names (enforced by the static guard in `tests/unit/test_log_scope_discipline.py`)

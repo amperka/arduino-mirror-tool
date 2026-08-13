@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Retrieve configured Arduino JSON indexes over HTTP for application publication flows.
-# SCOPE: HTTP JSON retrieval and source response validation.
-# NOT: Archive transfer, selection, storage, or CLI parsing.
+# SCOPE:
+# - HTTP JSON retrieval and source response validation.
+# - NOT: Archive transfer, selection, storage, or CLI parsing.
 # KEYWORDS: HTTP, index source, Arduino
 # endregion MODULE_CONTRACT
 

@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove an interruption signal immediately aborts an active archive download and closes its temporary archive stream.
-# SCOPE: Signal-driven archive-transfer cancellation and temporary-resource cleanup.
-# NOT: Real HTTP, target publication, index replacement, or stale cleanup.
+# SCOPE:
+# - Signal-driven archive-transfer cancellation and temporary-resource cleanup.
+# - NOT: Real HTTP, target publication, index replacement, or stale cleanup.
 # KEYWORDS: unit test, signal, download, temporary file, cancellation
 # endregion MODULE_CONTRACT
 

@@ -84,7 +84,7 @@ class Config:
 
     # endregion METHOD_validate
 
-    # region CLASSMETHOD_from_values
+    # region METHOD_from_values
     # PURPOSE: Apply CLI → non-empty environment → default precedence without exposing environment access to inner layers.
     @classmethod
     def from_values(
@@ -139,7 +139,7 @@ class Config:
             package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
         )
 
-    # endregion CLASSMETHOD_from_values
+    # endregion METHOD_from_values
 
 
 # endregion CLASS_Config

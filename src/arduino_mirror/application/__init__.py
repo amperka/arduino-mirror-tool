@@ -4,7 +4,8 @@
 # KEYWORDS: application facade, public api, re-export, composition root
 # endregion MODULE_CONTRACT
 
+from .library_selection import LatestLibrariesPolicy
+from .package_selection import LatestPackagesPolicy
 from .publication import PublishFamily
-from .selection import LatestLibrariesPolicy, LatestPackagesPolicy
 
 __all__ = ["LatestLibrariesPolicy", "LatestPackagesPolicy", "PublishFamily"]

@@ -1,8 +1,11 @@
 # region MODULE_CONTRACT
-# PURPOSE: E2E test fixtures.
+# PURPOSE: Provide E2E-only pytest fixtures so the suite can observe application log records without external services.
 # SCOPE:
+# - Mark E2E tests and capture `arduino_mirror` log records.
+# - NOT: Production logging configuration or application behavior.
 # DEPENDENCIES:
-# KEYWORDS: e2e fixtures, log capture
+# - USES API: pytest fixtures and markers; stdlib logging.
+# KEYWORDS: e2e, fixtures, log capture
 # endregion MODULE_CONTRACT
 
 import logging

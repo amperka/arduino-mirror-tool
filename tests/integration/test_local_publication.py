@@ -1,6 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove the publication HTTP and local-storage adapters publish one verified library family without touching another family namespace.
-# SCOPE: Local HTTP source, local target delivery, integrity rejection, and index replacement boundary.
+# SCOPE:
+# - Local HTTP source, local target delivery, integrity rejection, and index replacement boundary.
+# - NOT: S3 adapter coverage or production implementation.
 # KEYWORDS: integration test, HTTP, local target, archive verification, publication
 # endregion MODULE_CONTRACT
 

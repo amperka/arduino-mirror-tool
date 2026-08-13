@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Publish one family to a local directory tree for offline operation and end-to-end verification.
-# SCOPE: Family-scoped local archive reconciliation and atomic index replacement.
-# NOT: HTTP retrieval, selection, S3, or CLI parsing.
+# SCOPE:
+# - Family-scoped local archive reconciliation and atomic index replacement.
+# - NOT: HTTP retrieval, selection, S3, or CLI parsing.
 # KEYWORDS: local storage, target, publication
 # endregion MODULE_CONTRACT
 

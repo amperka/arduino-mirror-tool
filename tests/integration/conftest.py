@@ -1,9 +1,12 @@
 """Integration test fixtures."""
 # region MODULE_CONTRACT
-# PURPOSE: Pytest fixtures for integration tests.
+# PURPOSE: Mark integration tests so pytest can select the suite deterministically.
 # SCOPE:
+# - Apply the integration marker to tests in this directory.
+# - NOT: Provide test fixtures or implement integration behavior.
 # DEPENDENCIES:
-# KEYWORDS:
+# - USES API: pytest collection hooks and markers.
+# KEYWORDS: integration, pytest, marker
 # endregion MODULE_CONTRACT
 
 import pytest

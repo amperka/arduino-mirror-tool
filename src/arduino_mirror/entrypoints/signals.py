@@ -1,7 +1,8 @@
 # region MODULE_CONTRACT
 # PURPOSE: Convert process interruption signals into cooperative publication cancellation at safe operation boundaries.
-# SCOPE: SIGINT/SIGTERM installation, restoration, cancellation state, and operator exit status.
-# NOT: CLI parsing, publication orchestration, HTTP, or storage I/O.
+# SCOPE:
+# - SIGINT/SIGTERM installation, restoration, cancellation state, and operator exit status.
+# - NOT: CLI parsing, publication orchestration, HTTP, or storage I/O.
 # INVARIANTS: A signal handler only records cancellation; it never starts I/O or raises asynchronously from an adapter.
 # KEYWORDS: signal, SIGINT, SIGTERM, cancellation, publication
 # endregion MODULE_CONTRACT
