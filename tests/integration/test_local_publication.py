@@ -220,6 +220,50 @@ def test_local_publication_skips_matching_archive(
 # endregion FUNC_test_local_publication_skips_matching_archive
 
 
+# region FUNC_test_local_publication_replaces_same_size_checksum_mismatch
+# PURPOSE: Verify reconciliation replaces local bytes that have the declared size but fail supplied SHA-256 metadata.
+def test_local_publication_replaces_same_size_checksum_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A same-size corrupted local archive is re-downloaded before index replacement."""
+    source = tmp_path / "source"
+    source.mkdir()
+    archive_bytes = b"valid-release"
+    (source / "Existing-1.0.0.zip").write_bytes(archive_bytes)
+    target = tmp_path / "target"
+    corrupt_bytes = b"corrupt-bytes"
+    assert len(corrupt_bytes) == len(archive_bytes)
+    existing = target / "l" / "Existing-1.0.0.zip"
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(corrupt_bytes)
+
+    with _http_root(source) as origin:
+        (source / "library_index.json").write_text(
+            json.dumps(
+                {
+                    "libraries": [
+                        {
+                            "name": "Existing",
+                            "version": "1.0.0",
+                            "url": f"{origin}/Existing-1.0.0.zip",
+                            "checksum": (
+                                f"SHA-256:{hashlib.sha256(archive_bytes).hexdigest()}"
+                            ),
+                            "size": len(archive_bytes),
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        run_publication(_config(f"{origin}/library_index.json", target))
+
+    assert existing.read_bytes() == archive_bytes
+
+
+# endregion FUNC_test_local_publication_replaces_same_size_checksum_mismatch
+
+
 # region FUNC_test_invalid_archive_does_not_replace_index
 # PURPOSE: Verify failed supplied integrity metadata excludes the archive and preserves the current family index when no fallback exists.
 def test_invalid_archive_does_not_replace_index(

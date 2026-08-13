@@ -88,11 +88,18 @@ family target state unchanged.
 ### Requirement: Reconcile target archives without unnecessary transfers
 
 The local target SHALL scan only the selected family namespace and retain an
-existing archive when its declared size or its declared SHA-256 matches. The
+existing archive only when every declared integrity field matches: its declared
+size, when supplied, and its declared SHA-256, when supplied. The
 S3-compatible target SHALL use one family-prefix object listing, SHALL not make
 per-archive object requests, and SHALL retain an archive only when that listing
 reports the selected key with its declared size. It SHALL download and publish
 an archive that cannot be confirmed.
+
+#### Scenario: Replace a same-size local archive with a mismatched checksum
+
+- **WHEN** a local archive has the selected archive's declared size but differs
+  from its declared SHA-256
+- **THEN** the local target downloads and publishes the selected origin bytes
 
 #### Scenario: Confirm S3 archives from one listing
 

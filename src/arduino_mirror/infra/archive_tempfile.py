@@ -69,13 +69,13 @@ class VerifiedArchive:
 # region FUNC_is_file_verified
 # PURPOSE: Confirm that an already stored archive satisfies the selected source record without downloading it again.
 def is_file_verified(archive: Archive, path: Path) -> bool:
-    """Return whether ``path`` has the selected archive's declared size or SHA-256."""
+    """Return whether ``path`` satisfies every declared archive integrity field."""
     if not path.is_file():
         return False
-    if archive.size is not None and path.stat().st_size == archive.size:
-        return True
-    if archive.sha256 is None:
+    if archive.size is not None and path.stat().st_size != archive.size:
         return False
+    if archive.sha256 is None:
+        return archive.size is not None
     hasher = hashlib.sha256()
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
