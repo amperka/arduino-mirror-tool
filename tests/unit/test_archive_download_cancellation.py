@@ -158,3 +158,29 @@ def test_successful_download_closes_temporary_stream(
 
 
 # endregion FUNC_test_successful_download_closes_temporary_stream
+
+
+# region FUNC_test_second_signal_restores_default_handler_and_reraises
+# PURPOSE: Verify a second interruption signal immediately delegates to its default process behavior.
+def test_second_signal_restores_default_handler_and_reraises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second signal bypasses cooperative cancellation as an emergency exit."""
+    restored = []
+    redelivered = []
+    cancellation = SignalCancellation()
+    cancellation._signal_number = int(signal.SIGTERM)
+    monkeypatch.setattr(
+        signal,
+        "signal",
+        lambda signal_number, handler: restored.append((signal_number, handler)),
+    )
+    monkeypatch.setattr(signal, "raise_signal", redelivered.append)
+
+    cancellation._request_cancellation(signal.SIGINT, None)
+
+    assert restored == [(signal.SIGINT, signal.SIG_DFL)]
+    assert redelivered == [signal.SIGINT]
+
+
+# endregion FUNC_test_second_signal_restores_default_handler_and_reraises

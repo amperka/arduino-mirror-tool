@@ -427,6 +427,51 @@ def test_cancellation_after_archive_boundary_skips_index_and_cleanup() -> None:
 # endregion FUNC_test_cancellation_after_archive_boundary_skips_index_and_cleanup
 
 
+# region FUNC_test_cancellation_after_final_cleanup_returns_signal
+# PURPOSE: Verify cancellation recorded during final stale cleanup still reaches the CLI boundary as a signal result.
+def test_cancellation_after_final_cleanup_returns_signal() -> None:
+    """A final cleanup cancellation cannot be reported as a successful publication."""
+    target = RecordingPublicationTarget()
+    use_case = PublishFamily(
+        source=FixtureIndexSource(
+            family=IndexFamily.LIBRARIES,
+            raw_index={
+                "libraries": [
+                    {
+                        "name": "Cancellation",
+                        "version": "1.0.0",
+                        "url": "http://fixture.arduino.test/Cancellation-1.0.0.zip",
+                    }
+                ]
+            },
+        ),
+        selection=LatestLibrariesPolicy(
+            mirror_host="https://mirror.test.invalid",
+            origin_host="http://fixture.arduino.test",
+        ),
+        target=target,
+    )
+
+    def check_cancelled() -> None:
+        if target.operations[-1:] == ["libraries:cleanup"]:
+            raise PublicationCancelledError(signal.SIGTERM)
+
+    with pytest.raises(PublicationCancelledError) as error:
+        use_case.run(IndexFamily.LIBRARIES, check_cancelled=check_cancelled)
+
+    assert error.value.exit_code == _SIGTERM_EXIT
+    assert target.operations == [
+        "libraries:list",
+        "libraries:archives",
+        "libraries:index",
+        "libraries:cleanup",
+    ]
+    assert target.index_replaced is True
+
+
+# endregion FUNC_test_cancellation_after_final_cleanup_returns_signal
+
+
 # region FUNC_test_successful_flow_emits_trace_records
 # PURPOSE: Verify the application exposes source, selection, reconciliation, and publication boundaries through structured debug records.
 def test_successful_flow_emits_trace_records(caplog: pytest.LogCaptureFixture) -> None:

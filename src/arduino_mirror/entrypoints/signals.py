@@ -3,7 +3,7 @@
 # SCOPE:
 # - SIGINT/SIGTERM installation, restoration, cancellation state, and operator exit status.
 # - NOT: CLI parsing, publication orchestration, HTTP, or storage I/O.
-# INVARIANTS: A signal handler only records cancellation; it never starts I/O or raises asynchronously from an adapter.
+# INVARIANTS: The first signal records cancellation and raises only from an active archive download; a second signal restores default handling for an emergency exit.
 # KEYWORDS: signal, SIGINT, SIGTERM, cancellation, publication
 # endregion MODULE_CONTRACT
 
@@ -91,9 +91,12 @@ class SignalCancellation:
     # endregion METHOD_interrupt_download
 
     def _request_cancellation(self, signal_number: int, _: FrameType | None) -> None:
-        """Record the first signal and immediately unwind only an active archive download."""
-        if self._signal_number is None:
-            self._signal_number = signal_number
+        """Record a first signal or use a second one for an emergency exit."""
+        if self._signal_number is not None:
+            signal.signal(signal_number, signal.SIG_DFL)
+            signal.raise_signal(signal_number)
+            return
+        self._signal_number = signal_number
         if self._interrupting_download:
             raise PublicationCancelledError(self._signal_number)
 

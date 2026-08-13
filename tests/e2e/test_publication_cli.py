@@ -24,6 +24,7 @@ from threading import Thread
 
 from arduino_mirror.domain import IndexFamily
 from arduino_mirror.entrypoints.cli import main
+from arduino_mirror.infra.local_target import LocalPublicationTarget
 from tests.log_assertions import extra_fields
 
 _SIGTERM_EXIT = 128 + int(signal.SIGTERM)
@@ -206,6 +207,67 @@ def test_libraries_cli_reports_progress_without_debug(
 
 
 # endregion FUNC_test_libraries_cli_reports_progress_without_debug
+
+
+# region FUNC_test_libraries_cli_returns_signal_after_final_cleanup
+# PURPOSE: Verify the CLI reports a signal rather than success when SIGTERM arrives during the last stale cleanup.
+def test_libraries_cli_returns_signal_after_final_cleanup(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """A completed final deletion still produces the signal exit status."""
+    source = tmp_path / "source"
+    source.mkdir()
+    target = tmp_path / "target"
+    stale = target / "libraries" / "obsolete.zip"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"old")
+    archive_bytes = b"final cleanup cancellation"
+    (source / "Servo.zip").write_bytes(archive_bytes)
+    checksum = hashlib.sha256(archive_bytes).hexdigest()
+    original_cleanup = LocalPublicationTarget.cleanup_stale
+
+    def cancel_after_cleanup(self, plan, *, cancellation) -> None:
+        original_cleanup(self, plan, cancellation=cancellation)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    monkeypatch.setattr(LocalPublicationTarget, "cleanup_stale", cancel_after_cleanup)
+    with _http_root(source) as origin:
+        (source / "library_index.json").write_text(
+            json.dumps(
+                {
+                    "libraries": [
+                        {
+                            "name": "Servo",
+                            "version": "1.0.0",
+                            "url": f"{origin}/Servo.zip",
+                            "checksum": f"SHA-256:{checksum}",
+                            "size": len(archive_bytes),
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = main(
+            [
+                "libraries",
+                "--input",
+                f"{origin}/library_index.json",
+                "--mirror-host",
+                "https://mirror.test.invalid",
+                "--target",
+                "local",
+                "--local-root",
+                str(target),
+            ]
+        )
+
+    assert result == _SIGTERM_EXIT
+    assert not stale.exists()
+    assert "Publication cancelled by SIGTERM" in capsys.readouterr().err
+
+
+# endregion FUNC_test_libraries_cli_returns_signal_after_final_cleanup
 
 
 # region FUNC_test_libraries_cli_reports_nonzero_status_after_sigterm

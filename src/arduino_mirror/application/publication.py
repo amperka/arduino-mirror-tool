@@ -175,6 +175,7 @@ class PublishFamily:
         logger.debug("INDEX_REPLACED", extra={"family": family})
 
         self.target.cleanup_stale(plan, cancellation=controller)
+        controller.check()
         logger.debug(
             "STALE_CLEANED",
             extra={"family": family, "stale_count": len(plan.stale_keys)},
