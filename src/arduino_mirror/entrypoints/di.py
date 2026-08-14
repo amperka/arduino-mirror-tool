@@ -89,6 +89,7 @@ def _policy_for(config: Config) -> SelectionPolicy:
             architectures=config.architectures,
             package_names=config.package_names,
             pinned_tools=config.pinned_tools,
+            pinned_platforms=config.pinned_platforms,
         )
     return LatestLibrariesPolicy(
         mirror_host=config.mirror_host,

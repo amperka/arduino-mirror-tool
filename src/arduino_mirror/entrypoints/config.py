@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from arduino_mirror.domain import IndexFamily, PinnedTool
+from arduino_mirror.domain import IndexFamily, PinnedPlatform, PinnedTool
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -29,6 +29,7 @@ __all__ = [
     "DEFAULT_MIRROR_HOST",
     "DEFAULT_PACKAGES",
     "DEFAULT_PACKAGE_INPUT",
+    "DEFAULT_PINNED_PLATFORMS",
     "DEFAULT_PINNED_TOOLS",
     "DEFAULT_RETRY_ATTEMPTS",
     "DEFAULT_RETRY_BASE_DELAY",
@@ -45,8 +46,10 @@ DEFAULT_PINNED_TOOLS = (
     PinnedTool("builtin", "ctags", "5.8-arduino11"),
     PinnedTool("builtin", "serial-discovery", "1.0.0"),
 )
+DEFAULT_PINNED_PLATFORMS: tuple[PinnedPlatform, ...] = ()
 DEFAULT_RETRY_ATTEMPTS = 10
 _PINNED_TOOL_PATTERN = re.compile(r"([^,:@\s]+):([^,:@\s]+)@([^,:@\s]+)")
+_PINNED_PLATFORM_PATTERN = re.compile(r"([^,:@\s]+):([^,:@\s]+)@([^,:@\s]+)")
 DEFAULT_RETRY_BASE_DELAY = 1.0
 
 
@@ -85,6 +88,7 @@ class Config:
     retry_attempts: int
     retry_base_delay: float
     pinned_tools: tuple[PinnedTool, ...] = ()
+    pinned_platforms: tuple[PinnedPlatform, ...] = ()
     local_index: Path | None = None
 
     # region METHOD_index_key
@@ -139,7 +143,7 @@ class Config:
     # region METHOD_from_values
     # PURPOSE: Apply CLI → non-empty environment → default precedence without exposing environment access to inner layers.
     @classmethod
-    def from_values(
+    def from_values(  # noqa: PLR0915
         cls,
         *,
         family: IndexFamily,
@@ -176,6 +180,23 @@ class Config:
                     raise ValueError(msg)
                 tools.append(PinnedTool(*match.groups()))
             return tuple(dict.fromkeys(tools))
+
+        def pinned_platforms_value() -> tuple[PinnedPlatform, ...]:
+            raw = setting("pinned_platforms", "PINNED_PLATFORMS", "")
+            if not raw:
+                return DEFAULT_PINNED_PLATFORMS
+            parts = raw.split(",")
+            if any(not part.strip() for part in parts):
+                msg = "pinned platforms must be comma-separated packager:architecture@version identities"
+                raise ValueError(msg)
+            platforms: list[PinnedPlatform] = []
+            for part in parts:
+                match = _PINNED_PLATFORM_PATTERN.fullmatch(part.strip())
+                if match is None:
+                    msg = "pinned platforms must be comma-separated packager:architecture@version identities"
+                    raise ValueError(msg)
+                platforms.append(PinnedPlatform(*match.groups()))
+            return tuple(dict.fromkeys(platforms))
 
         def retry_attempts_value() -> int:
             value = values.get("retry_attempts")
@@ -251,6 +272,9 @@ class Config:
             retry_base_delay=retry_base_delay_value(),
             pinned_tools=(
                 pinned_tools_value() if family is IndexFamily.PACKAGES else ()
+            ),
+            pinned_platforms=(
+                pinned_platforms_value() if family is IndexFamily.PACKAGES else ()
             ),
             local_index=local_index,
         )
