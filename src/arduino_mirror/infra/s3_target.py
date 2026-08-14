@@ -13,7 +13,16 @@ from __future__ import annotations
 import io
 import json
 import logging
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    NotRequired,
+    Required,
+    TypedDict,
+    Unpack,
+    cast,
+    overload,
+)
 from urllib.parse import urlsplit
 
 from minio import Minio
@@ -21,15 +30,53 @@ from minio import Minio
 from arduino_mirror.domain import ArchiveUnavailableError
 
 from .archive_tempfile import VerifiedArchive, download_verified
-from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_s3, retry_call
+from .retry import (
+    DEFAULT_RETRY_POLICY,
+    RetryContext,
+    RetryPolicy,
+    is_transient_s3,
+    retry_call,
+)
 
 if TYPE_CHECKING:
     from arduino_mirror.domain import Archive, PublicationCancellation, PublicationPlan
 
 
-__all__ = ["S3PublicationTarget"]
+__all__ = ["S3PublicationTarget", "S3TargetSettings"]
 
 logger = logging.getLogger(__name__)
+
+
+class _S3TargetSettingsArguments(TypedDict):
+    """Legacy keyword representation of S3 target settings."""
+
+    bucket: Required[str]
+    access_key: Required[str]
+    secret_key: Required[str]
+    index_key: Required[str]
+    endpoint: NotRequired[str]
+    region: NotRequired[str]
+    prefix: NotRequired[str]
+    timeout_seconds: NotRequired[float]
+
+
+# region CLASS_S3TargetSettings
+# PURPOSE: Keep S3 connection and publication-namespace settings cohesive at the infrastructure boundary.
+@dataclass(frozen=True)
+class S3TargetSettings:
+    """Resolved immutable settings for one S3-compatible publication target."""
+
+    bucket: str
+    access_key: str
+    secret_key: str
+    index_key: str
+    endpoint: str = ""
+    region: str = ""
+    prefix: str = ""
+    timeout_seconds: float = 600.0
+
+
+# endregion CLASS_S3TargetSettings
 
 
 # region CLASS_S3PublicationTarget
@@ -37,31 +84,48 @@ logger = logging.getLogger(__name__)
 class S3PublicationTarget:
     """Map logical target keys to an S3-compatible bucket through MinIO."""
 
-    def __init__(  # noqa: PLR0913
+    @overload
+    def __init__(
+        self,
+        settings: S3TargetSettings,
+        *,
+        retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+    ) -> None: ...
+
+    @overload
+    def __init__(
         self,
         *,
-        bucket: str,
-        endpoint: str = "",
-        access_key: str,
-        secret_key: str,
-        region: str = "",
-        index_key: str,
-        prefix: str = "",
-        timeout_seconds: float = 600.0,
         retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+        **settings_arguments: Unpack[_S3TargetSettingsArguments],
+    ) -> None: ...
+
+    def __init__(
+        self,
+        settings: S3TargetSettings | None = None,
+        *,
+        retry_policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+        **settings_arguments: object,
     ) -> None:
         """Create one S3-compatible target from resolved composition settings."""
-        host, secure = _minio_endpoint(endpoint)
-        self._bucket = bucket
-        self._index_key = index_key
-        self._prefix = prefix.strip("/")
-        self._timeout_seconds = timeout_seconds
+        if settings is None:
+            settings = S3TargetSettings(
+                **cast("_S3TargetSettingsArguments", settings_arguments)
+            )
+        elif settings_arguments:
+            msg = "pass either S3TargetSettings or individual target settings"
+            raise TypeError(msg)
+        host, secure = _minio_endpoint(settings.endpoint)
+        self._bucket = settings.bucket
+        self._index_key = settings.index_key
+        self._prefix = settings.prefix.strip("/")
+        self._timeout_seconds = settings.timeout_seconds
         self._retry_policy = retry_policy
         self._client = Minio(
             host,
-            access_key=access_key,
-            secret_key=secret_key,
-            region=region or None,
+            access_key=settings.access_key,
+            secret_key=settings.secret_key,
+            region=settings.region or None,
             secure=secure,
         )
 
@@ -126,7 +190,7 @@ class S3PublicationTarget:
                         lambda a=archive, v=verified: self._put_archive(a, v),
                         is_retriable=is_transient_s3,
                         policy=self._retry_policy,
-                        cancellation=cancellation,
+                        context=RetryContext(cancellation=cancellation),
                     )
             except Exception as error:
                 cancellation.check()
@@ -153,7 +217,7 @@ class S3PublicationTarget:
             lambda: self._put_index(plan),
             is_retriable=is_transient_s3,
             policy=self._retry_policy,
-            cancellation=cancellation,
+            context=RetryContext(cancellation=cancellation),
         )
         logger.info("Published %s", self._index_key)
         logger.debug(
@@ -175,7 +239,7 @@ class S3PublicationTarget:
                 lambda k=key: self._remove_key(k),
                 is_retriable=is_transient_s3,
                 policy=self._retry_policy,
-                cancellation=cancellation,
+                context=RetryContext(cancellation=cancellation),
             )
             logger.info("Removed %s", key)
         logger.debug(

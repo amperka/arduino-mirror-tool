@@ -35,6 +35,35 @@ from arduino_mirror.domain import (
 __all__ = ["LatestPackagesPolicy"]
 
 
+# region CLASS__ArchiveAvailability
+# PURPOSE: Keep archive eligibility inputs cohesive across package-selection helpers.
+@dataclass(frozen=True)
+class _ArchiveAvailability:
+    """Inputs needed to determine whether an origin archive remains usable."""
+
+    mirror_host: str
+    origin_host: str
+    unavailable_archive_keys: frozenset[str]
+
+
+# endregion CLASS__ArchiveAvailability
+
+
+# region CLASS__ToolSelectionState
+# PURPOSE: Share the mutable tool-selection result collections without long helper signatures.
+@dataclass
+class _ToolSelectionState:
+    """Mutable collections accumulated while retaining selected tools."""
+
+    retained: dict[str, dict[str, Any]]
+    tools_needed: set[tuple[str, str, str]]
+    archive_keys: set[str]
+    archives: dict[str, Archive]
+
+
+# endregion CLASS__ToolSelectionState
+
+
 # region CLASS_LatestPackagesPolicy
 # PURPOSE: Select configured latest Arduino platforms and their required tool archives while keeping package policy replaceable.
 @dataclass(frozen=True)
@@ -50,7 +79,7 @@ class LatestPackagesPolicy:
 
     # region METHOD_select
     # PURPOSE: Transform configured Boards Manager releases into a package-only publication plan.
-    def select(  # noqa: PLR0912, PLR0915
+    def select(
         self,
         raw_index: dict[str, object],
         *,
@@ -58,6 +87,11 @@ class LatestPackagesPolicy:
     ) -> PublicationPlan:
         """Select filtered latest available platforms and tool releases from a package index."""
         packages = dict_list(raw_index.get("packages"))
+        availability = _ArchiveAvailability(
+            mirror_host=self.mirror_host,
+            origin_host=self.origin_host,
+            unavailable_archive_keys=unavailable_archive_keys,
+        )
         unavailable_tools = _unavailable_tools(
             packages,
             mirror_host=self.mirror_host,
@@ -74,9 +108,7 @@ class LatestPackagesPolicy:
         skipped_pinned_platforms = _skipped_pinned_platforms(
             packages,
             pinned_platforms=self.pinned_platforms,
-            mirror_host=self.mirror_host,
-            origin_host=self.origin_host,
-            unavailable_archive_keys=unavailable_archive_keys,
+            availability=availability,
             unavailable_tools=unavailable_tools,
         )
         pinned_platforms = frozenset(self.pinned_platforms)
@@ -98,9 +130,7 @@ class LatestPackagesPolicy:
                 name,
                 platforms,
                 pinned_platforms=pinned_platforms,
-                mirror_host=self.mirror_host,
-                origin_host=self.origin_host,
-                unavailable_archive_keys=unavailable_archive_keys,
+                availability=availability,
                 unavailable_tools=unavailable_tools,
             )
             if name not in self.package_names and not pinned_matches:
@@ -186,46 +216,16 @@ class LatestPackagesPolicy:
         # endregion BLOCK_select_platforms
 
         # region BLOCK_select_tools
-        for package in packages:
-            package_name = package.get("name")
-            if not isinstance(package_name, str):
-                continue
-            selected_tools: list[dict[str, Any]] = []
-            selected_identities: set[tuple[str, str, str]] = set()
-            for tool in dict_list(package.get("tools")):
-                tool_name = tool.get("name")
-                tool_version = tool.get("version")
-                if not isinstance(tool_name, str) or not isinstance(tool_version, str):
-                    continue
-                identity = (package_name, tool_name, tool_version)
-                if (
-                    identity not in tools_needed
-                    or identity in selected_identities
-                    or not _tool_is_available(
-                        tool,
-                        mirror_host=self.mirror_host,
-                        origin_host=self.origin_host,
-                        unavailable_archive_keys=unavailable_archive_keys,
-                    )
-                ):
-                    continue
-                selected_tools.append(tool)
-                selected_identities.add(identity)
-            if not selected_tools:
-                continue
-            output = retained.setdefault(
-                package_name, _selected_package_output(package)
-            )
-            output["tools"] = []
-            for tool in selected_tools:
-                transformed, keys, descriptors = transform_tool(
-                    tool, mirror_host=self.mirror_host, origin_host=self.origin_host
-                )
-                output["tools"].append(transformed)
-                archive_keys.update(keys)
-                archives.update(
-                    {descriptor.key: descriptor for descriptor in descriptors}
-                )
+        _select_tools(
+            packages,
+            state=_ToolSelectionState(
+                retained=retained,
+                tools_needed=tools_needed,
+                archive_keys=archive_keys,
+                archives=archives,
+            ),
+            availability=availability,
+        )
         # endregion BLOCK_select_tools
 
         index_packages = [
@@ -259,6 +259,62 @@ def _selected_package_output(package: dict[str, Any]) -> dict[str, Any]:
 
 
 # endregion FUNC__selected_package_output
+
+
+# region FUNC__select_tools
+# PURPOSE: Retain every dependency-selected or pinned tool exactly once for each package owner.
+def _select_tools(
+    packages: list[dict[str, Any]],
+    *,
+    state: _ToolSelectionState,
+    availability: _ArchiveAvailability,
+) -> None:
+    """Add selected tools and their archive descriptors to the accumulated state."""
+    for package in packages:
+        package_name = package.get("name")
+        if not isinstance(package_name, str):
+            continue
+        selected_tools: list[dict[str, Any]] = []
+        selected_identities: set[tuple[str, str, str]] = set()
+        for tool in dict_list(package.get("tools")):
+            tool_name = tool.get("name")
+            tool_version = tool.get("version")
+            if not isinstance(tool_name, str) or not isinstance(tool_version, str):
+                continue
+            identity = (package_name, tool_name, tool_version)
+            if (
+                identity not in state.tools_needed
+                or identity in selected_identities
+                or not _tool_is_available(
+                    tool,
+                    mirror_host=availability.mirror_host,
+                    origin_host=availability.origin_host,
+                    unavailable_archive_keys=availability.unavailable_archive_keys,
+                )
+            ):
+                continue
+            selected_tools.append(tool)
+            selected_identities.add(identity)
+        if not selected_tools:
+            continue
+        output = state.retained.setdefault(
+            package_name, _selected_package_output(package)
+        )
+        output["tools"] = []
+        for tool in selected_tools:
+            transformed, keys, descriptors = transform_tool(
+                tool,
+                mirror_host=availability.mirror_host,
+                origin_host=availability.origin_host,
+            )
+            output["tools"].append(transformed)
+            state.archive_keys.update(keys)
+            state.archives.update(
+                {descriptor.key: descriptor for descriptor in descriptors}
+            )
+
+
+# endregion FUNC__select_tools
 
 
 # region FUNC__skipped_pinned_tools
@@ -309,13 +365,11 @@ def _skipped_pinned_tools(
 
 # region FUNC__skipped_pinned_platforms
 # PURPOSE: Describe exact requested platforms absent from the source or excluded by unavailable archives.
-def _skipped_pinned_platforms(  # noqa: PLR0913
+def _skipped_pinned_platforms(
     packages: list[dict[str, Any]],
     *,
     pinned_platforms: tuple[PinnedPlatform, ...],
-    mirror_host: str,
-    origin_host: str,
-    unavailable_archive_keys: frozenset[str],
+    availability: _ArchiveAvailability,
     unavailable_tools: frozenset[tuple[str, str, str]],
 ) -> tuple[PinnedPlatformSkip, ...]:
     """Return deterministic diagnostics for platform pins that selection cannot retain."""
@@ -338,9 +392,9 @@ def _skipped_pinned_platforms(  # noqa: PLR0913
             matching.add(pin)
             reason = _platform_unavailability_reason(
                 platform,
-                mirror_host=mirror_host,
-                origin_host=origin_host,
-                unavailable_archive_keys=unavailable_archive_keys,
+                mirror_host=availability.mirror_host,
+                origin_host=availability.origin_host,
+                unavailable_archive_keys=availability.unavailable_archive_keys,
                 unavailable_tools=unavailable_tools,
             )
             if reason is None:
@@ -361,14 +415,12 @@ def _skipped_pinned_platforms(  # noqa: PLR0913
 
 # region FUNC__pinned_platform_matches
 # PURPOSE: Find available source platforms whose exact owner, architecture, and version match a configured pin.
-def _pinned_platform_matches(  # noqa: PLR0913
+def _pinned_platform_matches(
     package_name: str,
     platforms: list[dict[str, Any]],
     *,
     pinned_platforms: frozenset[PinnedPlatform],
-    mirror_host: str,
-    origin_host: str,
-    unavailable_archive_keys: frozenset[str],
+    availability: _ArchiveAvailability,
     unavailable_tools: frozenset[tuple[str, str, str]],
 ) -> list[dict[str, Any]]:
     """Return available exact platform-pin records from one package owner."""
@@ -381,9 +433,9 @@ def _pinned_platform_matches(  # noqa: PLR0913
         in pinned_platforms
         and _platform_is_available(
             platform,
-            mirror_host=mirror_host,
-            origin_host=origin_host,
-            unavailable_archive_keys=unavailable_archive_keys,
+            mirror_host=availability.mirror_host,
+            origin_host=availability.origin_host,
+            unavailable_archive_keys=availability.unavailable_archive_keys,
             unavailable_tools=unavailable_tools,
         )
     ]

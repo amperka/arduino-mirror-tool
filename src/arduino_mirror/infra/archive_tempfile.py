@@ -20,7 +20,13 @@ from typing import TYPE_CHECKING, BinaryIO, cast
 
 import requests
 
-from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, is_transient_http, retry_call
+from .retry import (
+    DEFAULT_RETRY_POLICY,
+    RetryContext,
+    RetryPolicy,
+    is_transient_http,
+    retry_call,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -130,7 +136,7 @@ def download_verified(
             transfer,
             is_retriable=is_transient_http,
             policy=retry_policy,
-            cancellation=cancellation,
+            context=RetryContext(cancellation=cancellation),
         )
         cancellation.check()
         _raise_if_invalid(archive, family, digest, size)
