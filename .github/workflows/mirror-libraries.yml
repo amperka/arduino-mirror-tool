@@ -14,9 +14,6 @@ concurrency:
   group: mirror-libraries-publication
 
 env:
-  MIRROR_HOST: "https://arduino-downloads.amperka.ru"
-  ARCHITECTURES: "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"
-  PACKAGES: "arduino,builtin"
   TARGET_KIND: "s3"
 
 jobs:
@@ -36,6 +33,7 @@ jobs:
 
       - name: Publish packages then libraries
         env:
+          MIRROR_HOST: "${{ vars.MIRROR_HOST }}"
           TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
           TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
           TARGET_PREFIX: ""
