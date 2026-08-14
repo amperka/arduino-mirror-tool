@@ -53,6 +53,136 @@ _PINNED_PLATFORM_PATTERN = re.compile(r"([^,:@\s]+):([^,:@\s]+)@([^,:@\s]+)")
 DEFAULT_RETRY_BASE_DELAY = 1.0
 
 
+# region CLASS__ConfigSources
+# PURPOSE: Centralize CLI and environment precedence so configuration assembly stays declarative.
+@dataclass(frozen=True)
+class _ConfigSources:
+    """Resolve CLI values and environment fallbacks for one command invocation."""
+
+    values: Mapping[str, str | bool | float | int | None]
+    environment: Mapping[str, str]
+
+    def setting(self, name: str, env_name: str, default: str) -> str:
+        """Return the explicit non-empty CLI value, environment value, or default."""
+        value = self.values.get(name)
+        if isinstance(value, str) and value:
+            return value
+        return self.environment.get(env_name) or default
+
+    def csv(
+        self, name: str, env_name: str, default: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """Return comma-separated values with surrounding whitespace removed."""
+        value = self.setting(name, env_name, ",".join(default))
+        return tuple(part.strip() for part in value.split(",") if part.strip())
+
+    def pinned_tools(self) -> tuple[PinnedTool, ...]:
+        """Return validated, deduplicated exact tool identities."""
+        raw = self.setting(
+            "pinned_tools",
+            "PINNED_TOOLS",
+            ",".join(tool.identity for tool in DEFAULT_PINNED_TOOLS),
+        )
+        parts = raw.split(",")
+        if any(not part.strip() for part in parts):
+            msg = (
+                "pinned tools must be comma-separated packager:name@version identities"
+            )
+            raise ValueError(msg)
+        tools: list[PinnedTool] = []
+        for part in parts:
+            match = _PINNED_TOOL_PATTERN.fullmatch(part.strip())
+            if match is None:
+                msg = "pinned tools must be comma-separated packager:name@version identities"
+                raise ValueError(msg)
+            tools.append(PinnedTool(*match.groups()))
+        return tuple(dict.fromkeys(tools))
+
+    def pinned_platforms(self) -> tuple[PinnedPlatform, ...]:
+        """Return validated, deduplicated exact platform identities."""
+        raw = self.setting("pinned_platforms", "PINNED_PLATFORMS", "")
+        if not raw:
+            return DEFAULT_PINNED_PLATFORMS
+        parts = raw.split(",")
+        if any(not part.strip() for part in parts):
+            msg = "pinned platforms must be comma-separated packager:architecture@version identities"
+            raise ValueError(msg)
+        platforms: list[PinnedPlatform] = []
+        for part in parts:
+            match = _PINNED_PLATFORM_PATTERN.fullmatch(part.strip())
+            if match is None:
+                msg = "pinned platforms must be comma-separated packager:architecture@version identities"
+                raise ValueError(msg)
+            platforms.append(PinnedPlatform(*match.groups()))
+        return tuple(dict.fromkeys(platforms))
+
+    def retry_attempts(self) -> int:
+        """Return a validated retry-attempt count."""
+        value = self.values.get("retry_attempts")
+        if isinstance(value, int) and not isinstance(value, bool):
+            parsed = value
+        else:
+            raw = self.environment.get("RETRY_ATTEMPTS")
+            parsed = int(raw) if raw else DEFAULT_RETRY_ATTEMPTS
+        if parsed < 1:
+            msg = "retry attempts must be a positive integer"
+            raise ValueError(msg)
+        return parsed
+
+    def retry_base_delay(self) -> float:
+        """Return a validated retry base delay."""
+        value = self.values.get("retry_base_delay")
+        if isinstance(value, float):
+            parsed = value
+        else:
+            raw = self.environment.get("RETRY_BASE_DELAY")
+            parsed = float(raw) if raw else DEFAULT_RETRY_BASE_DELAY
+        if parsed < 0:
+            msg = "retry base delay must be non-negative"
+            raise ValueError(msg)
+        return parsed
+
+    def dry_run(self) -> bool:
+        """Return the explicit CLI flag or its environment fallback."""
+        value = self.values.get("dry_run")
+        return (
+            value
+            if isinstance(value, bool)
+            else self.environment.get("DRY_RUN", "").lower() in {"1", "true", "yes"}
+        )
+
+    def local_index(self, environment_name: str) -> Path | None:
+        """Return the configured family-local overlay path, if any."""
+        value = self.values.get("local_index")
+        if isinstance(value, str) and value:
+            return Path(value)
+        raw = self.environment.get(environment_name)
+        return Path(raw) if raw else None
+
+
+# endregion CLASS__ConfigSources
+
+
+# region FUNC__family_index_settings
+# PURPOSE: Keep family-specific index defaults and environment names consistent.
+def _family_index_settings(family: IndexFamily) -> tuple[str, str, str]:
+    """Return the input and overlay environment names and default URL for one family."""
+    if family is IndexFamily.PACKAGES:
+        return (
+            "PACKAGES_INPUT_INDEX",
+            DEFAULT_PACKAGE_INPUT,
+            "PACKAGES_LOCAL_INDEX",
+        )
+    return (
+        "LIBRARIES_INPUT_INDEX",
+        DEFAULT_LIBRARY_INPUT,
+        "LIBRARIES_LOCAL_INDEX",
+    )
+
+
+# endregion FUNC__family_index_settings
+
+
 # region CLASS_TargetKind
 # PURPOSE: Restrict publication configuration to storage targets that the composition root can build.
 class TargetKind(StrEnum):
@@ -143,7 +273,7 @@ class Config:
     # region METHOD_from_values
     # PURPOSE: Apply CLI → non-empty environment → default precedence without exposing environment access to inner layers.
     @classmethod
-    def from_values(  # noqa: PLR0915
+    def from_values(
         cls,
         *,
         family: IndexFamily,
@@ -151,132 +281,42 @@ class Config:
         environment: Mapping[str, str],
     ) -> Config:
         """Resolve command settings from parser values and a supplied environment mapping."""
-
-        def setting(name: str, env_name: str, default: str) -> str:
-            value = values.get(name)
-            if isinstance(value, str) and value:
-                return value
-            return environment.get(env_name) or default
-
-        def csv(name: str, env_name: str, default: tuple[str, ...]) -> tuple[str, ...]:
-            value = setting(name, env_name, ",".join(default))
-            return tuple(part.strip() for part in value.split(",") if part.strip())
-
-        def pinned_tools_value() -> tuple[PinnedTool, ...]:
-            raw = setting(
-                "pinned_tools",
-                "PINNED_TOOLS",
-                ",".join(tool.identity for tool in DEFAULT_PINNED_TOOLS),
-            )
-            parts = raw.split(",")
-            if any(not part.strip() for part in parts):
-                msg = "pinned tools must be comma-separated packager:name@version identities"
-                raise ValueError(msg)
-            tools: list[PinnedTool] = []
-            for part in parts:
-                match = _PINNED_TOOL_PATTERN.fullmatch(part.strip())
-                if match is None:
-                    msg = "pinned tools must be comma-separated packager:name@version identities"
-                    raise ValueError(msg)
-                tools.append(PinnedTool(*match.groups()))
-            return tuple(dict.fromkeys(tools))
-
-        def pinned_platforms_value() -> tuple[PinnedPlatform, ...]:
-            raw = setting("pinned_platforms", "PINNED_PLATFORMS", "")
-            if not raw:
-                return DEFAULT_PINNED_PLATFORMS
-            parts = raw.split(",")
-            if any(not part.strip() for part in parts):
-                msg = "pinned platforms must be comma-separated packager:architecture@version identities"
-                raise ValueError(msg)
-            platforms: list[PinnedPlatform] = []
-            for part in parts:
-                match = _PINNED_PLATFORM_PATTERN.fullmatch(part.strip())
-                if match is None:
-                    msg = "pinned platforms must be comma-separated packager:architecture@version identities"
-                    raise ValueError(msg)
-                platforms.append(PinnedPlatform(*match.groups()))
-            return tuple(dict.fromkeys(platforms))
-
-        def retry_attempts_value() -> int:
-            value = values.get("retry_attempts")
-            if isinstance(value, int) and not isinstance(value, bool):
-                parsed: int = value
-            else:
-                raw = environment.get("RETRY_ATTEMPTS")
-                parsed = int(raw) if raw else DEFAULT_RETRY_ATTEMPTS
-            if parsed < 1:
-                msg = "retry attempts must be a positive integer"
-                raise ValueError(msg)
-            return parsed
-
-        def retry_base_delay_value() -> float:
-            value = values.get("retry_base_delay")
-            if isinstance(value, float):
-                parsed: float = value
-            else:
-                raw = environment.get("RETRY_BASE_DELAY")
-                parsed = float(raw) if raw else DEFAULT_RETRY_BASE_DELAY
-            if parsed < 0:
-                msg = "retry base delay must be non-negative"
-                raise ValueError(msg)
-            return parsed
-
-        dry_value = values.get("dry_run")
-        dry_run = (
-            dry_value
-            if isinstance(dry_value, bool)
-            else (environment.get("DRY_RUN", "").lower() in {"1", "true", "yes"})
-        )
-        input_env = (
-            "PACKAGES_INPUT_INDEX"
-            if family is IndexFamily.PACKAGES
-            else "LIBRARIES_INPUT_INDEX"
-        )
-        input_default = (
-            DEFAULT_PACKAGE_INPUT
-            if family is IndexFamily.PACKAGES
-            else DEFAULT_LIBRARY_INPUT
-        )
-        local_index_env = (
-            "PACKAGES_LOCAL_INDEX"
-            if family is IndexFamily.PACKAGES
-            else "LIBRARIES_LOCAL_INDEX"
-        )
-        local_index_raw = values.get("local_index")
-        local_index = (
-            Path(local_index_raw)
-            if isinstance(local_index_raw, str) and local_index_raw
-            else (
-                Path(environment[local_index_env])
-                if environment.get(local_index_env)
-                else None
-            )
+        sources = _ConfigSources(values, environment)
+        input_environment, input_default, local_index_environment = (
+            _family_index_settings(family)
         )
         return cls(
             family=family,
-            input_index=setting("input_index", input_env, input_default),
-            mirror_host=setting("mirror_host", "MIRROR_HOST", DEFAULT_MIRROR_HOST),
-            target=TargetKind(setting("target", "TARGET_KIND", "s3")),
-            bucket=setting("bucket", "TARGET_BUCKET", ""),
-            prefix=setting("prefix", "TARGET_PREFIX", ""),
-            endpoint=setting("endpoint", "TARGET_ENDPOINT", ""),
-            region=setting("region", "TARGET_REGION", ""),
-            local_root=Path(setting("local_root", "TARGET_LOCAL_ROOT", "mirror-out")),
-            dry_run=dry_run,
-            access_key=setting("access_key", "AWS_ACCESS_KEY_ID", ""),
-            secret_key=setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
-            architectures=csv("architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES),
-            package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
-            retry_attempts=retry_attempts_value(),
-            retry_base_delay=retry_base_delay_value(),
+            input_index=sources.setting(
+                "input_index", input_environment, input_default
+            ),
+            mirror_host=sources.setting(
+                "mirror_host", "MIRROR_HOST", DEFAULT_MIRROR_HOST
+            ),
+            target=TargetKind(sources.setting("target", "TARGET_KIND", "s3")),
+            bucket=sources.setting("bucket", "TARGET_BUCKET", ""),
+            prefix=sources.setting("prefix", "TARGET_PREFIX", ""),
+            endpoint=sources.setting("endpoint", "TARGET_ENDPOINT", ""),
+            region=sources.setting("region", "TARGET_REGION", ""),
+            local_root=Path(
+                sources.setting("local_root", "TARGET_LOCAL_ROOT", "mirror-out")
+            ),
+            dry_run=sources.dry_run(),
+            access_key=sources.setting("access_key", "AWS_ACCESS_KEY_ID", ""),
+            secret_key=sources.setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
+            architectures=sources.csv(
+                "architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES
+            ),
+            package_names=sources.csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
+            retry_attempts=sources.retry_attempts(),
+            retry_base_delay=sources.retry_base_delay(),
             pinned_tools=(
-                pinned_tools_value() if family is IndexFamily.PACKAGES else ()
+                sources.pinned_tools() if family is IndexFamily.PACKAGES else ()
             ),
             pinned_platforms=(
-                pinned_platforms_value() if family is IndexFamily.PACKAGES else ()
+                sources.pinned_platforms() if family is IndexFamily.PACKAGES else ()
             ),
-            local_index=local_index,
+            local_index=sources.local_index(local_index_environment),
         )
 
     # endregion METHOD_from_values

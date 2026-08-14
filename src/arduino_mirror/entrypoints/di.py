@@ -26,6 +26,7 @@ from arduino_mirror.infra import (
     LocalPublicationTarget,
     RetryPolicy,
     S3PublicationTarget,
+    S3TargetSettings,
 )
 
 from .config import Config, TargetKind
@@ -60,13 +61,15 @@ def make_publication_use_case(config: Config) -> PublishFamily:
             )
         case TargetKind.S3:
             target = S3PublicationTarget(
-                bucket=config.bucket,
-                endpoint=config.endpoint,
-                access_key=config.access_key,
-                secret_key=config.secret_key,
-                region=config.region,
-                index_key=config.index_key,
-                prefix=config.prefix,
+                S3TargetSettings(
+                    bucket=config.bucket,
+                    endpoint=config.endpoint,
+                    access_key=config.access_key,
+                    secret_key=config.secret_key,
+                    region=config.region,
+                    index_key=config.index_key,
+                    prefix=config.prefix,
+                ),
                 retry_policy=retry_policy,
             )
     policy = _policy_for(config)

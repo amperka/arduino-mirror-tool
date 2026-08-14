@@ -28,7 +28,7 @@ from arduino_mirror.domain import (
 )
 from arduino_mirror.infra.archive_tempfile import VerifiedArchive
 from arduino_mirror.infra.retry import RetryPolicy
-from arduino_mirror.infra.s3_target import S3PublicationTarget
+from arduino_mirror.infra.s3_target import S3PublicationTarget, S3TargetSettings
 from tests.log_assertions import extra_fields
 
 
@@ -194,11 +194,13 @@ def test_s3_target_skips_archives_confirmed_by_one_listing(monkeypatch) -> None:
         lambda *_: pytest.fail("already-published archive was downloaded"),
     )
     target = S3PublicationTarget(
-        bucket="mirror",
-        access_key="access",
-        secret_key="secret",
-        index_key="l/libraries/library_index.json",
-        prefix="managed",
+        S3TargetSettings(
+            bucket="mirror",
+            access_key="access",
+            secret_key="secret",
+            index_key="l/libraries/library_index.json",
+            prefix="managed",
+        )
     )
     client = FakeMinio.instances[0]
     client.objects = [
@@ -262,11 +264,13 @@ def test_s3_target_retries_transient_put_then_succeeds(monkeypatch) -> None:
         "arduino_mirror.infra.s3_target.download_verified", _verified_archive
     )
     target = S3PublicationTarget(
-        bucket="mirror",
-        access_key="access",
-        secret_key="secret",
-        index_key="l/libraries/library_index.json",
-        prefix="managed",
+        S3TargetSettings(
+            bucket="mirror",
+            access_key="access",
+            secret_key="secret",
+            index_key="l/libraries/library_index.json",
+            prefix="managed",
+        ),
         retry_policy=RetryPolicy(max_attempts=5, base_delay=0),
     )
     plan = PublicationPlan(
@@ -307,11 +311,13 @@ def test_s3_target_identifies_unavailable_archive(monkeypatch) -> None:
         "arduino_mirror.infra.s3_target.download_verified", _verified_archive
     )
     target = S3PublicationTarget(
-        bucket="mirror",
-        access_key="access",
-        secret_key="secret",
-        index_key="l/libraries/library_index.json",
-        prefix="managed",
+        S3TargetSettings(
+            bucket="mirror",
+            access_key="access",
+            secret_key="secret",
+            index_key="l/libraries/library_index.json",
+            prefix="managed",
+        )
     )
     plan = PublicationPlan(
         family=IndexFamily.LIBRARIES,
