@@ -87,7 +87,7 @@ class PublishFamily:
         if plan.family is not family:
             msg = f"selection returned {plan.family} for {family}"
             raise ValueError(msg)
-        _warn_skipped_pinned_tools(plan, warned_identities=set())
+        _warn_skipped_pins(plan, warned_identities=set())
         logger.info(
             "Selected %s %s release(s), %s archive(s)",
             len(plan.releases),
@@ -123,14 +123,14 @@ class PublishFamily:
         controller.check()
         logger.debug("SOURCE_FETCHED", extra={"family": family})
         unavailable_archive_keys = frozenset[str]()
-        warned_pinned_tool_identities: set[str] = set()
+        warned_pinned_identities: set[str] = set()
         while True:
             plan = self._plan_from_raw(
                 family,
                 raw_index,
                 check=controller.check,
                 unavailable_archive_keys=unavailable_archive_keys,
-                warned_pinned_tool_identities=warned_pinned_tool_identities,
+                warned_pinned_identities=warned_pinned_identities,
             )
             if not plan.archives:
                 logger.warning(
@@ -189,7 +189,7 @@ class PublishFamily:
         *,
         check: Callable[[], None],
         unavailable_archive_keys: frozenset[str] = frozenset(),
-        warned_pinned_tool_identities: set[str] | None = None,
+        warned_pinned_identities: set[str] | None = None,
     ) -> PublicationPlan:
         """Return a reconciled plan for the supplied source snapshot and availability exclusions."""
         selected = self.selection.select(
@@ -199,11 +199,11 @@ class PublishFamily:
         if selected.family is not family:
             msg = f"selection returned {selected.family} for {family}"
             raise ValueError(msg)
-        _warn_skipped_pinned_tools(
+        _warn_skipped_pins(
             selected,
             warned_identities=(
-                warned_pinned_tool_identities
-                if warned_pinned_tool_identities is not None
+                warned_pinned_identities
+                if warned_pinned_identities is not None
                 else set()
             ),
         )
@@ -244,17 +244,16 @@ class PublishFamily:
     # endregion METHOD__plan_from_raw
 
 
-# region FUNC__warn_skipped_pinned_tools
+# region FUNC__warn_skipped_pins
 # PURPOSE: Keep skipped explicit pins visible without repeating warnings during availability re-planning.
-def _warn_skipped_pinned_tools(
-    plan: PublicationPlan, *, warned_identities: set[str]
-) -> None:
+def _warn_skipped_pins(plan: PublicationPlan, *, warned_identities: set[str]) -> None:
     """Emit one actionable warning for each unique exact pin skipped in this run."""
     for skipped in plan.skipped_pinned_tools:
         identity = skipped.tool.identity
-        if identity in warned_identities:
+        warning_identity = f"tool:{identity}"
+        if warning_identity in warned_identities:
             continue
-        warned_identities.add(identity)
+        warned_identities.add(warning_identity)
         logger.warning(
             "Pinned tool skipped: %s (%s)",
             identity,
@@ -265,9 +264,25 @@ def _warn_skipped_pinned_tools(
                 "reason": skipped.reason,
             },
         )
+    for skipped in plan.skipped_pinned_platforms:
+        identity = skipped.platform.identity
+        warning_identity = f"platform:{identity}"
+        if warning_identity in warned_identities:
+            continue
+        warned_identities.add(warning_identity)
+        logger.warning(
+            "Pinned platform skipped: %s (%s)",
+            identity,
+            skipped.reason,
+            extra={
+                "family": plan.family,
+                "pinned_platform": identity,
+                "reason": skipped.reason,
+            },
+        )
 
 
-# endregion FUNC__warn_skipped_pinned_tools
+# endregion FUNC__warn_skipped_pins
 
 
 def _continue() -> None:

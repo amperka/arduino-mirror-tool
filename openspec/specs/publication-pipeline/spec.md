@@ -29,36 +29,41 @@ mutating a target.
 - **THEN** the system merges only the packages overlay before packages selection
   and does not read the libraries overlay
 
-### Requirement: Pinned package tool configuration
+### Requirement: Pinned package selection configuration
 
 The system SHALL resolve exact pinned package-tool identities from
 `--pinned-tools`, then non-empty `PINNED_TOOLS`, then the default
-`builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0`. A resolved
-non-empty list SHALL be comma-separated `packager:name@version` identities;
-whitespace around elements SHALL be ignored, malformed identities and empty
-elements SHALL fail configuration before source retrieval, and duplicate
-identities SHALL be retained once. An empty CLI or environment value SHALL not
-replace the default. The `packages` pipeline SHALL use the resolved list; the
-libraries pipeline SHALL ignore this setting, including malformed values.
+`builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0`. It SHALL resolve
+exact pinned package-platform identities from `--pinned-platforms`, then
+non-empty `PINNED_PLATFORMS`, then the empty default. A resolved non-empty tool
+or platform list SHALL be comma-separated `packager:name@version` or
+`packager:architecture@version` identities respectively; whitespace around
+elements SHALL be ignored, malformed identities and empty elements SHALL fail
+configuration before source retrieval, and duplicate identities SHALL be
+retained once. An empty CLI or environment value SHALL not replace its default.
+The `packages` pipeline SHALL use both resolved lists; the `libraries` pipeline
+SHALL ignore both settings, including malformed values.
 
 #### Scenario: CLI pins override environment pins
 
-- **WHEN** `arduino-mirror packages --pinned-tools builtin:ctags@5.8-arduino11`
-  runs with `PINNED_TOOLS=builtin:serial-discovery@1.0.0`
-- **THEN** the package policy receives only `builtin:ctags@5.8-arduino11` as an
-  explicit pin
+- **WHEN** `arduino-mirror packages --pinned-tools builtin:ctags@5.8-arduino11 --pinned-platforms arduino:avr@1.8.8`
+  runs with `PINNED_TOOLS=builtin:serial-discovery@1.0.0` and
+  `PINNED_PLATFORMS=arduino:samd@1.8.14`
+- **THEN** the package policy receives only `builtin:ctags@5.8-arduino11` as a
+  tool pin and only `arduino:avr@1.8.8` as a platform pin
 
-#### Scenario: Reject a malformed pinned tool list
+#### Scenario: Reject a malformed pinned platform list
 
 - **WHEN** an operator supplies
-  `--pinned-tools builtin:ctags@5.8-arduino11,,builtin:serial-discovery@1.0.0`
+  `--pinned-platforms arduino:avr@1.8.8,,arduino:samd@1.8.14`
 - **THEN** configuration fails before the source index is fetched
 
 #### Scenario: Ignore malformed pins for libraries
 
 - **WHEN** an operator runs `arduino-mirror libraries` with malformed
-  `--pinned-tools` or `PINNED_TOOLS`
-- **THEN** the library pipeline continues without resolving pinned tools
+  `--pinned-tools`, `PINNED_TOOLS`, `--pinned-platforms`, or `PINNED_PLATFORMS`
+- **THEN** the library pipeline continues without resolving pinned tools or
+  platforms
 
 ### Requirement: Family-specific index selection
 
@@ -66,9 +71,11 @@ The system SHALL use separate selection policies for the two Arduino index
 formats. For configured package names and architectures, the package policy
 SHALL retain the newest eligible configured-origin platform per architecture and
 the exact tool versions required by each retained platform. It SHALL additionally
-retain each eligible exact configured pinned tool identity from the complete
-package index, independently of configured package names and platform
-dependencies. For a configured package with no platforms, it SHALL retain the
+retain each eligible exact configured pinned tool identity and each eligible
+exact configured pinned platform identity from the complete package index,
+independently of configured package names and architectures. Platform pins use
+the exact package owner, platform architecture, and platform version; they
+SHALL not select a replacement version. For a configured package with no platforms, it SHALL retain the
 newest eligible tool version per tool name. The library policy SHALL retain the
 newest eligible configured-origin release per exact library name. For library
 releases with the same base version, SemVer numeric prerelease identifiers SHALL
@@ -94,7 +101,15 @@ an entry retained solely for a pinned tool SHALL have no platforms.
   `1.0.0-alpha`
 - **THEN** the selected release is `1.0.0-alpha`
 
-#### Scenario: Mirror an exact pin outside configured package names
+#### Scenario: Mirror an exact pin outside configured package names and architectures
+
+- **WHEN** `arduino:avr@1.8.8` is pinned and `arduino` and `avr` are absent
+  from the configured package names and architectures
+- **THEN** the generated package index contains the exact selected `avr`
+  platform, its exact tool dependencies, and its eligible origin archive
+  descriptors
+
+#### Scenario: Mirror an exact tool pin outside configured package names
 
 - **WHEN** `builtin:ctags@5.8-arduino11` is pinned and `builtin` is absent from
   configured package names
@@ -109,6 +124,15 @@ an entry retained solely for a pinned tool SHALL have no platforms.
 - **THEN** the generated index omits that exact tool, selects no replacement
   version for it, and the command emits one warning for that pinned identity with
   the reason
+
+#### Scenario: Skip an unavailable pinned platform
+
+- **WHEN** every source record for a pinned exact platform is absent, its
+  platform archive is unavailable, or one of its exact required tool archives
+  is unavailable
+- **THEN** the generated index omits that exact platform, selects no replacement
+  version for it, and the command emits one warning for that pinned identity
+  with the reason
 
 #### Scenario: Retain platform fallback for an unavailable pinned dependency
 

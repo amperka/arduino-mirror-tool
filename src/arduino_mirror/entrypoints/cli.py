@@ -165,6 +165,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Comma-separated exact package tools to retain as packager:name@version; ignored for libraries.",
     )
     parser.add_argument(
+        "--pinned-platforms",
+        help="Comma-separated exact package platforms to retain as packager:architecture@version; ignored for libraries.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=None,

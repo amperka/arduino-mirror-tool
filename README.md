@@ -62,7 +62,8 @@ CLI values override non-empty environment variables, which override defaults.
 Important variables are `PACKAGES_INPUT_INDEX`, `LIBRARIES_INPUT_INDEX`,
 `PACKAGES_LOCAL_INDEX`, `LIBRARIES_LOCAL_INDEX`, `MIRROR_HOST`, `TARGET_KIND`,
 `TARGET_BUCKET`, `TARGET_ENDPOINT`, `TARGET_PREFIX`, `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `ARCHITECTURES`, `PACKAGES`, and `PINNED_TOOLS`.
+`AWS_SECRET_ACCESS_KEY`, `ARCHITECTURES`, `PACKAGES`, `PINNED_TOOLS`, and
+`PINNED_PLATFORMS`.
 Archive bytes are held only in automatically cleaned temporary storage during
 publication.
 
@@ -74,6 +75,13 @@ added to the latest platform dependencies; malformed non-empty lists fail before
 the source index is fetched. To retain an additional tool version, include both
 the defaults and the extra exact identity in `PINNED_TOOLS`, for example
 `builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0,builtin:serial-discovery@1.1.0`.
+
+Exact platform releases can also be retained with `--pinned-platforms` or
+`PINNED_PLATFORMS`, as comma-separated `packager:architecture@version`
+identities, for example `arduino:avr@1.8.8`. Platform pins have no default and
+are independent of `PACKAGES` and `ARCHITECTURES`; each selected pin retains
+its declared exact tool dependencies. An absent or unavailable platform pin is
+omitted with a warning and never selects a replacement version.
 
 Pass `--local-index PATH` or set `PACKAGES_LOCAL_INDEX` / `LIBRARIES_LOCAL_INDEX`
 to merge one same-family JSON overlay after the remote index is fetched and

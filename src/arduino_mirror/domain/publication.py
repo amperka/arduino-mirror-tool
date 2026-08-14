@@ -19,6 +19,8 @@ __all__ = [
     "Archive",
     "ArchiveUnavailableError",
     "IndexFamily",
+    "PinnedPlatform",
+    "PinnedPlatformSkip",
     "PinnedTool",
     "PinnedToolSkip",
     "PublicationPlan",
@@ -80,6 +82,25 @@ class PinnedTool:
 # endregion CLASS_PinnedTool
 
 
+# region CLASS_PinnedPlatform
+# PURPOSE: Identify one exact Boards Manager platform release independently of the latest-platform policy.
+@dataclass(frozen=True, order=True)
+class PinnedPlatform:
+    """One exact package-owner, architecture, and version identity."""
+
+    packager: str
+    architecture: str
+    version: str
+
+    @property
+    def identity(self) -> str:
+        """Return the stable operator-facing identity for this platform."""
+        return f"{self.packager}:{self.architecture}@{self.version}"
+
+
+# endregion CLASS_PinnedPlatform
+
+
 # region CLASS_PinnedToolSkip
 # PURPOSE: Carry the non-secret reason an explicitly requested tool cannot appear in a publication plan.
 @dataclass(frozen=True)
@@ -91,6 +112,19 @@ class PinnedToolSkip:
 
 
 # endregion CLASS_PinnedToolSkip
+
+
+# region CLASS_PinnedPlatformSkip
+# PURPOSE: Carry the non-secret reason an explicitly requested platform cannot appear in a publication plan.
+@dataclass(frozen=True)
+class PinnedPlatformSkip:
+    """One skipped pinned platform and its selection reason."""
+
+    platform: PinnedPlatform
+    reason: str
+
+
+# endregion CLASS_PinnedPlatformSkip
 
 
 # region CLASS_ArchiveUnavailableError
@@ -120,6 +154,7 @@ class PublicationPlan:
     stale_keys: tuple[str, ...] = ()
     _archives_to_publish: tuple[Archive, ...] | None = None
     skipped_pinned_tools: tuple[PinnedToolSkip, ...] = ()
+    skipped_pinned_platforms: tuple[PinnedPlatformSkip, ...] = ()
 
     # region METHOD_archive_keys
     # PURPOSE: Expose deterministic selected keys for reconciliation without duplicating archive descriptors in the plan.
