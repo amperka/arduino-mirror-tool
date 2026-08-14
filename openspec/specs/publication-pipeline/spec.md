@@ -10,9 +10,10 @@ or S3-compatible target.
 
 The system SHALL expose `packages` and `libraries` commands. Each invocation
 SHALL operate on exactly one `IndexFamily`, fetch only that family's configured
-input index, and never begin the other family's pipeline. CLI values SHALL take
-precedence over non-empty environment values, which SHALL take precedence over
-defaults. `--dry-run` SHALL select and report a plan without reconciling or
+input index and optionally merge only that family's configured local overlay
+before selection, and never begin the other family's pipeline. CLI values SHALL
+take precedence over non-empty environment values, which SHALL take precedence
+over defaults. `--dry-run` SHALL select and report a plan without reconciling or
 mutating a target.
 
 #### Scenario: Preview library publication
@@ -20,6 +21,13 @@ mutating a target.
 - **WHEN** an operator runs `arduino-mirror libraries --dry-run`
 - **THEN** the system fetches and selects the library index but performs no target
   read, archive download, upload, index replacement, or cleanup
+
+#### Scenario: Family-scoped overlay selection
+
+- **WHEN** an operator runs `arduino-mirror packages` with
+  `PACKAGES_LOCAL_INDEX` and `LIBRARIES_LOCAL_INDEX` both configured
+- **THEN** the system merges only the packages overlay before packages selection
+  and does not read the libraries overlay
 
 ### Requirement: Pinned package tool configuration
 
@@ -31,7 +39,7 @@ whitespace around elements SHALL be ignored, malformed identities and empty
 elements SHALL fail configuration before source retrieval, and duplicate
 identities SHALL be retained once. An empty CLI or environment value SHALL not
 replace the default. The `packages` pipeline SHALL use the resolved list; the
-libraries pipeline SHALL not change its selection because of it.
+libraries pipeline SHALL ignore this setting, including malformed values.
 
 #### Scenario: CLI pins override environment pins
 
@@ -45,6 +53,12 @@ libraries pipeline SHALL not change its selection because of it.
 - **WHEN** an operator supplies
   `--pinned-tools builtin:ctags@5.8-arduino11,,builtin:serial-discovery@1.0.0`
 - **THEN** configuration fails before the source index is fetched
+
+#### Scenario: Ignore malformed pins for libraries
+
+- **WHEN** an operator runs `arduino-mirror libraries` with malformed
+  `--pinned-tools` or `PINNED_TOOLS`
+- **THEN** the library pipeline continues without resolving pinned tools
 
 ### Requirement: Family-specific index selection
 

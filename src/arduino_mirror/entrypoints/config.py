@@ -82,9 +82,10 @@ class Config:
     secret_key: str
     architectures: tuple[str, ...]
     package_names: tuple[str, ...]
-    pinned_tools: tuple[PinnedTool, ...]
     retry_attempts: int
     retry_base_delay: float
+    pinned_tools: tuple[PinnedTool, ...] = ()
+    local_index: Path | None = None
 
     # region METHOD_index_key
     # PURPOSE: Place the configured source index path in its family's archive namespace.
@@ -216,6 +217,21 @@ class Config:
             if family is IndexFamily.PACKAGES
             else DEFAULT_LIBRARY_INPUT
         )
+        local_index_env = (
+            "PACKAGES_LOCAL_INDEX"
+            if family is IndexFamily.PACKAGES
+            else "LIBRARIES_LOCAL_INDEX"
+        )
+        local_index_raw = values.get("local_index")
+        local_index = (
+            Path(local_index_raw)
+            if isinstance(local_index_raw, str) and local_index_raw
+            else (
+                Path(environment[local_index_env])
+                if environment.get(local_index_env)
+                else None
+            )
+        )
         return cls(
             family=family,
             input_index=setting("input_index", input_env, input_default),
@@ -231,9 +247,12 @@ class Config:
             secret_key=setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
             architectures=csv("architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES),
             package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
-            pinned_tools=pinned_tools_value(),
             retry_attempts=retry_attempts_value(),
             retry_base_delay=retry_base_delay_value(),
+            pinned_tools=(
+                pinned_tools_value() if family is IndexFamily.PACKAGES else ()
+            ),
+            local_index=local_index,
         )
 
     # endregion METHOD_from_values

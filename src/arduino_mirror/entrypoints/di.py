@@ -19,9 +19,10 @@ from arduino_mirror.application import (
     LatestPackagesPolicy,
     PublishFamily,
 )
-from arduino_mirror.domain import IndexFamily, SelectionPolicy
+from arduino_mirror.domain import IndexFamily, IndexSource, SelectionPolicy
 from arduino_mirror.infra import (
     HttpIndexSource,
+    LocalOverlayIndexSource,
     LocalPublicationTarget,
     RetryPolicy,
     S3PublicationTarget,
@@ -42,10 +43,12 @@ def make_publication_use_case(config: Config) -> PublishFamily:
         max_attempts=config.retry_attempts,
         base_delay=config.retry_base_delay,
     )
-    source = HttpIndexSource(
+    source: IndexSource = HttpIndexSource(
         urls={config.family: config.input_index},
         retry_policy=retry_policy,
     )
+    if config.local_index is not None:
+        source = LocalOverlayIndexSource(source=source, path=config.local_index)
     target: LocalPublicationTarget | S3PublicationTarget
     match config.target:
         case TargetKind.LOCAL:
