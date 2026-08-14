@@ -130,6 +130,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Source index URL; defaults depend on the selected family.",
     )
     parser.add_argument(
+        "--local-index",
+        help="Optional local JSON overlay; its environment variable depends on the selected family.",
+    )
+    parser.add_argument(
         "--mirror-host",
         help="Public base URL used when archive URLs are rewritten in the index.",
     )

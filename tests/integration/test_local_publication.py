@@ -176,6 +176,62 @@ def test_local_publication_flow_verifies_archives_replaces_index_and_cleans_own_
 # endregion FUNC_test_local_publication_flow_verifies_archives_replaces_index_and_cleans_own_prefix
 
 
+# region FUNC_test_local_overlay_publishes_origin_archives_and_preserves_external_urls
+# PURPOSE: Verify a local library overlay follows existing origin ownership during real HTTP and local-target publication.
+def test_local_overlay_publishes_origin_archives_and_preserves_external_urls(
+    tmp_path: Path,
+) -> None:
+    """An overlay-origin library publishes while an external overlay library stays external."""
+    source = tmp_path / "source"
+    source.mkdir()
+    archive_bytes = b"overlay library"
+    (source / "Overlay.zip").write_bytes(archive_bytes)
+    target = tmp_path / "target"
+    overlay = tmp_path / "libraries-overlay.json"
+
+    with _http_root(source) as origin:
+        (source / "library_index.json").write_text(
+            json.dumps({"libraries": []}), encoding="utf-8"
+        )
+        overlay.write_text(
+            json.dumps(
+                {
+                    "libraries": [
+                        {
+                            "name": "Overlay",
+                            "version": "1.0.0",
+                            "url": f"{origin}/Overlay.zip",
+                            "size": len(archive_bytes),
+                        },
+                        {
+                            "name": "External",
+                            "version": "1.0.0",
+                            "url": "https://vendor.example.invalid/External.zip",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        plan = run_publication(
+            replace(
+                _config(f"{origin}/library_index.json", target), local_index=overlay
+            )
+        )
+
+    assert plan.archive_keys == ("l/Overlay.zip",)
+    assert (target / "l" / "Overlay.zip").read_bytes() == archive_bytes
+    index = json.loads(
+        (target / "l" / "library_index.json").read_text(encoding="utf-8")
+    )
+    libraries = {library["name"]: library for library in index["libraries"]}
+    assert libraries["Overlay"]["url"] == "https://mirror.test.invalid/l/Overlay.zip"
+    assert libraries["External"]["url"] == "https://vendor.example.invalid/External.zip"
+
+
+# endregion FUNC_test_local_overlay_publishes_origin_archives_and_preserves_external_urls
+
+
 # region FUNC_test_local_publication_skips_matching_archive
 # PURPOSE: Verify a repeated publication does not download or copy a local archive whose selected key and declared size already match.
 def test_local_publication_skips_matching_archive(
