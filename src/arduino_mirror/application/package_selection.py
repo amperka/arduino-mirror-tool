@@ -22,7 +22,13 @@ from arduino_mirror.application.selection_common import (
     transform_archive_record,
     transform_tool,
 )
-from arduino_mirror.domain import Archive, IndexFamily, PublicationPlan
+from arduino_mirror.domain import (
+    Archive,
+    IndexFamily,
+    PinnedTool,
+    PinnedToolSkip,
+    PublicationPlan,
+)
 
 __all__ = ["LatestPackagesPolicy"]
 
@@ -37,6 +43,7 @@ class LatestPackagesPolicy:
     origin_host: str
     architectures: tuple[str, ...]
     package_names: tuple[str, ...]
+    pinned_tools: tuple[PinnedTool, ...] = ()
 
     # region METHOD_select
     # PURPOSE: Transform configured Boards Manager releases into a package-only publication plan.
@@ -54,8 +61,17 @@ class LatestPackagesPolicy:
             origin_host=self.origin_host,
             unavailable_archive_keys=unavailable_archive_keys,
         )
+        skipped_pinned_tools = _skipped_pinned_tools(
+            packages,
+            pinned_tools=self.pinned_tools,
+            mirror_host=self.mirror_host,
+            origin_host=self.origin_host,
+            unavailable_archive_keys=unavailable_archive_keys,
+        )
         retained: dict[str, dict[str, Any]] = {}
-        tools_needed: set[tuple[str, str, str]] = set()
+        tools_needed = {
+            (tool.packager, tool.name, tool.version) for tool in self.pinned_tools
+        }
         archive_keys: set[str] = set()
         archives: dict[str, Archive] = {}
         releases: list[str] = []
@@ -66,9 +82,7 @@ class LatestPackagesPolicy:
             if not isinstance(name, str) or name not in self.package_names:
                 continue
             platforms = dict_list(package.get("platforms"))
-            output = deepcopy(package)
-            output["platforms"] = []
-            output["tools"] = []
+            output = _selected_package_output(package)
             retained[name] = output
             if not platforms:
                 for tool in _latest_by_name(
@@ -147,21 +161,32 @@ class LatestPackagesPolicy:
             package_name = package.get("name")
             if not isinstance(package_name, str):
                 continue
-            selected_tools = [
-                tool
-                for tool in dict_list(package.get("tools"))
-                if (package_name, tool.get("name"), tool.get("version")) in tools_needed
-                and _tool_is_available(
-                    tool,
-                    mirror_host=self.mirror_host,
-                    origin_host=self.origin_host,
-                    unavailable_archive_keys=unavailable_archive_keys,
-                )
-            ]
+            selected_tools: list[dict[str, Any]] = []
+            selected_identities: set[tuple[str, str, str]] = set()
+            for tool in dict_list(package.get("tools")):
+                tool_name = tool.get("name")
+                tool_version = tool.get("version")
+                if not isinstance(tool_name, str) or not isinstance(tool_version, str):
+                    continue
+                identity = (package_name, tool_name, tool_version)
+                if (
+                    identity not in tools_needed
+                    or identity in selected_identities
+                    or not _tool_is_available(
+                        tool,
+                        mirror_host=self.mirror_host,
+                        origin_host=self.origin_host,
+                        unavailable_archive_keys=unavailable_archive_keys,
+                    )
+                ):
+                    continue
+                selected_tools.append(tool)
+                selected_identities.add(identity)
             if not selected_tools:
                 continue
-            output = retained.setdefault(package_name, deepcopy(package))
-            output.setdefault("platforms", [])
+            output = retained.setdefault(
+                package_name, _selected_package_output(package)
+            )
             output["tools"] = []
             for tool in selected_tools:
                 transformed, keys, descriptors = transform_tool(
@@ -184,12 +209,72 @@ class LatestPackagesPolicy:
             releases=tuple(sorted(releases)),
             archives=tuple(archives[key] for key in sorted(archive_keys)),
             index={"packages": index_packages},
+            skipped_pinned_tools=skipped_pinned_tools,
         )
 
     # endregion METHOD_select
 
 
 # endregion CLASS_LatestPackagesPolicy
+
+
+# region FUNC__selected_package_output
+# PURPOSE: Preserve package metadata while preventing unselected platforms and tools from entering a filtered index.
+def _selected_package_output(package: dict[str, Any]) -> dict[str, Any]:
+    """Return a package copy with only selection-owned collections."""
+    output = deepcopy(package)
+    output["platforms"] = []
+    output["tools"] = []
+    return output
+
+
+# endregion FUNC__selected_package_output
+
+
+# region FUNC__skipped_pinned_tools
+# PURPOSE: Describe exact requested tools absent from the source or excluded by unavailable origin system archives.
+def _skipped_pinned_tools(
+    packages: list[dict[str, Any]],
+    *,
+    pinned_tools: tuple[PinnedTool, ...],
+    mirror_host: str,
+    origin_host: str,
+    unavailable_archive_keys: frozenset[str],
+) -> tuple[PinnedToolSkip, ...]:
+    """Return deterministic diagnostics for pins that selection cannot retain."""
+    pins = frozenset(pinned_tools)
+    matching: set[PinnedTool] = set()
+    available: set[PinnedTool] = set()
+    for package in packages:
+        package_name = package.get("name")
+        if not isinstance(package_name, str):
+            continue
+        for tool in dict_list(package.get("tools")):
+            tool_name = tool.get("name")
+            tool_version = tool.get("version")
+            if not isinstance(tool_name, str) or not isinstance(tool_version, str):
+                continue
+            pin = PinnedTool(package_name, tool_name, tool_version)
+            if pin not in pins:
+                continue
+            matching.add(pin)
+            if _tool_is_available(
+                tool,
+                mirror_host=mirror_host,
+                origin_host=origin_host,
+                unavailable_archive_keys=unavailable_archive_keys,
+            ):
+                available.add(pin)
+    skipped: list[PinnedToolSkip] = []
+    for pin in sorted(pins):
+        if pin not in matching:
+            skipped.append(PinnedToolSkip(pin, "not found in source index"))
+        elif pin not in available:
+            skipped.append(PinnedToolSkip(pin, "origin system archive unavailable"))
+    return tuple(skipped)
+
+
+# endregion FUNC__skipped_pinned_tools
 
 
 # region FUNC__platform_is_available

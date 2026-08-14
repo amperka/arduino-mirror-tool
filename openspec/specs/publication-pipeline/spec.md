@@ -21,22 +21,51 @@ mutating a target.
 - **THEN** the system fetches and selects the library index but performs no target
   read, archive download, upload, index replacement, or cleanup
 
+### Requirement: Pinned package tool configuration
+
+The system SHALL resolve exact pinned package-tool identities from
+`--pinned-tools`, then non-empty `PINNED_TOOLS`, then the default
+`builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0`. A resolved
+non-empty list SHALL be comma-separated `packager:name@version` identities;
+whitespace around elements SHALL be ignored, malformed identities and empty
+elements SHALL fail configuration before source retrieval, and duplicate
+identities SHALL be retained once. An empty CLI or environment value SHALL not
+replace the default. The `packages` pipeline SHALL use the resolved list; the
+libraries pipeline SHALL not change its selection because of it.
+
+#### Scenario: CLI pins override environment pins
+
+- **WHEN** `arduino-mirror packages --pinned-tools builtin:ctags@5.8-arduino11`
+  runs with `PINNED_TOOLS=builtin:serial-discovery@1.0.0`
+- **THEN** the package policy receives only `builtin:ctags@5.8-arduino11` as an
+  explicit pin
+
+#### Scenario: Reject a malformed pinned tool list
+
+- **WHEN** an operator supplies
+  `--pinned-tools builtin:ctags@5.8-arduino11,,builtin:serial-discovery@1.0.0`
+- **THEN** configuration fails before the source index is fetched
+
 ### Requirement: Family-specific index selection
 
 The system SHALL use separate selection policies for the two Arduino index
 formats. For configured package names and architectures, the package policy
 SHALL retain the newest eligible configured-origin platform per architecture and
-the exact tool versions required by each retained platform. For a configured
-package with no platforms, it SHALL retain the newest eligible tool version per
-tool name. The library policy SHALL retain the newest eligible configured-origin
-release per exact library name. For library releases with the same base version,
-SemVer numeric prerelease identifiers SHALL have lower precedence than textual
-prerelease identifiers at the same identifier position; stable releases SHALL
-have higher precedence than prereleases. Library records, and configured
-package/platform records, outside the configured origin SHALL remain unchanged
-and SHALL create no mirror archive work. Selected origin archive URLs SHALL be
-rewritten to the configured mirror host while other retained record fields are
-preserved.
+the exact tool versions required by each retained platform. It SHALL additionally
+retain each eligible exact configured pinned tool identity from the complete
+package index, independently of configured package names and platform
+dependencies. For a configured package with no platforms, it SHALL retain the
+newest eligible tool version per tool name. The library policy SHALL retain the
+newest eligible configured-origin release per exact library name. For library
+releases with the same base version, SemVer numeric prerelease identifiers SHALL
+have lower precedence than textual prerelease identifiers at the same identifier
+position; stable releases SHALL have higher precedence than prereleases. Library
+records, and configured package/platform records, outside the configured origin
+SHALL remain unchanged and SHALL create no mirror archive work. Selected origin
+archive URLs SHALL be rewritten to the configured mirror host while other
+retained record fields are preserved. Each retained package entry SHALL contain
+only selected platforms and the union of dependency-selected and pinned tools;
+an entry retained solely for a pinned tool SHALL have no platforms.
 
 #### Scenario: Preserve an external library release
 
@@ -50,6 +79,29 @@ preserved.
 - **WHEN** eligible origin releases for one library are `1.0.0-1` and
   `1.0.0-alpha`
 - **THEN** the selected release is `1.0.0-alpha`
+
+#### Scenario: Mirror an exact pin outside configured package names
+
+- **WHEN** `builtin:ctags@5.8-arduino11` is pinned and `builtin` is absent from
+  configured package names
+- **THEN** the generated package index contains a `builtin` entry with an empty
+  `platforms` list, the exact selected `ctags` tool, and its eligible origin
+  archive descriptors
+
+#### Scenario: Skip an unavailable pinned tool
+
+- **WHEN** every source record for a pinned exact tool is absent or one of its
+  required origin system archives is unavailable
+- **THEN** the generated index omits that exact tool, selects no replacement
+  version for it, and the command emits one warning for that pinned identity with
+  the reason
+
+#### Scenario: Retain platform fallback for an unavailable pinned dependency
+
+- **WHEN** a selected latest platform requires an exact tool that is also pinned
+  and an origin system archive for that tool is unavailable
+- **THEN** the platform is ineligible and the package policy selects the newest
+  older available platform for its architecture
 
 ### Requirement: Verified archive publication
 

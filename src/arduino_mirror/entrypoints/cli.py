@@ -157,6 +157,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Comma-separated Boards Manager package names to retain; ignored for libraries.",
     )
     parser.add_argument(
+        "--pinned-tools",
+        help="Comma-separated exact package tools to retain as packager:name@version; ignored for libraries.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=None,

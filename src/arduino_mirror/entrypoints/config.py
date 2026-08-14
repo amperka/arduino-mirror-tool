@@ -11,13 +11,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from arduino_mirror.domain import IndexFamily
+from arduino_mirror.domain import IndexFamily, PinnedTool
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -28,6 +29,7 @@ __all__ = [
     "DEFAULT_MIRROR_HOST",
     "DEFAULT_PACKAGES",
     "DEFAULT_PACKAGE_INPUT",
+    "DEFAULT_PINNED_TOOLS",
     "DEFAULT_RETRY_ATTEMPTS",
     "DEFAULT_RETRY_BASE_DELAY",
     "Config",
@@ -39,7 +41,12 @@ DEFAULT_PACKAGE_INPUT = "https://downloads.arduino.cc/packages/package_index.jso
 DEFAULT_LIBRARY_INPUT = "https://downloads.arduino.cc/libraries/library_index.json"
 DEFAULT_ARCHITECTURES = ("avr", "samd", "sam", "megaavr", "mbed_nano", "mbed_rp2040")
 DEFAULT_PACKAGES = ("arduino", "builtin")
+DEFAULT_PINNED_TOOLS = (
+    PinnedTool("builtin", "ctags", "5.8-arduino11"),
+    PinnedTool("builtin", "serial-discovery", "1.0.0"),
+)
 DEFAULT_RETRY_ATTEMPTS = 10
+_PINNED_TOOL_PATTERN = re.compile(r"([^,:@\s]+):([^,:@\s]+)@([^,:@\s]+)")
 DEFAULT_RETRY_BASE_DELAY = 1.0
 
 
@@ -75,6 +82,7 @@ class Config:
     secret_key: str
     architectures: tuple[str, ...]
     package_names: tuple[str, ...]
+    pinned_tools: tuple[PinnedTool, ...]
     retry_attempts: int
     retry_base_delay: float
 
@@ -149,6 +157,25 @@ class Config:
             value = setting(name, env_name, ",".join(default))
             return tuple(part.strip() for part in value.split(",") if part.strip())
 
+        def pinned_tools_value() -> tuple[PinnedTool, ...]:
+            raw = setting(
+                "pinned_tools",
+                "PINNED_TOOLS",
+                ",".join(tool.identity for tool in DEFAULT_PINNED_TOOLS),
+            )
+            parts = raw.split(",")
+            if any(not part.strip() for part in parts):
+                msg = "pinned tools must be comma-separated packager:name@version identities"
+                raise ValueError(msg)
+            tools: list[PinnedTool] = []
+            for part in parts:
+                match = _PINNED_TOOL_PATTERN.fullmatch(part.strip())
+                if match is None:
+                    msg = "pinned tools must be comma-separated packager:name@version identities"
+                    raise ValueError(msg)
+                tools.append(PinnedTool(*match.groups()))
+            return tuple(dict.fromkeys(tools))
+
         def retry_attempts_value() -> int:
             value = values.get("retry_attempts")
             if isinstance(value, int) and not isinstance(value, bool):
@@ -204,6 +231,7 @@ class Config:
             secret_key=setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
             architectures=csv("architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES),
             package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
+            pinned_tools=pinned_tools_value(),
             retry_attempts=retry_attempts_value(),
             retry_base_delay=retry_base_delay_value(),
         )
