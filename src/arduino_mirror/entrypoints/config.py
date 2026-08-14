@@ -82,9 +82,9 @@ class Config:
     secret_key: str
     architectures: tuple[str, ...]
     package_names: tuple[str, ...]
-    pinned_tools: tuple[PinnedTool, ...]
     retry_attempts: int
     retry_base_delay: float
+    pinned_tools: tuple[PinnedTool, ...] = ()
 
     # region METHOD_index_key
     # PURPOSE: Place the configured source index path in its family's archive namespace.
@@ -231,9 +231,11 @@ class Config:
             secret_key=setting("secret_key", "AWS_SECRET_ACCESS_KEY", ""),
             architectures=csv("architectures", "ARCHITECTURES", DEFAULT_ARCHITECTURES),
             package_names=csv("package_names", "PACKAGES", DEFAULT_PACKAGES),
-            pinned_tools=pinned_tools_value(),
             retry_attempts=retry_attempts_value(),
             retry_base_delay=retry_base_delay_value(),
+            pinned_tools=(
+                pinned_tools_value() if family is IndexFamily.PACKAGES else ()
+            ),
         )
 
     # endregion METHOD_from_values

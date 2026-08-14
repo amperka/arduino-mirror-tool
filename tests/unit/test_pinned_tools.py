@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -19,9 +20,13 @@ from arduino_mirror.application import (
     LatestPackagesPolicy,
     PublishFamily,
 )
-from arduino_mirror.domain import IndexFamily, PinnedTool
+from arduino_mirror.domain import IndexFamily, PinnedTool, PublicationPlan
 from arduino_mirror.entrypoints.cli import _build_parser
-from arduino_mirror.entrypoints.config import DEFAULT_PINNED_TOOLS, Config
+from arduino_mirror.entrypoints.config import (
+    DEFAULT_PINNED_TOOLS,
+    Config,
+    TargetKind,
+)
 from arduino_mirror.entrypoints.di import make_publication_use_case
 from tests.doubles import FixtureIndexSource, RecordingPublicationTarget
 from tests.log_assertions import extra_fields
@@ -106,6 +111,50 @@ def test_pinned_tool_configuration_rejects_malformed_values(value: str) -> None:
 
 
 # endregion FUNC_test_pinned_tool_configuration_rejects_malformed_values
+
+
+# region FUNC_test_library_pins_are_ignored_and_public_constructors_remain_compatible
+# PURPOSE: Preserve library isolation and positional construction contracts while adding package-only pin metadata.
+def test_library_pins_are_ignored_and_public_constructors_remain_compatible() -> None:
+    """Libraries bypass malformed pin input and older positional constructors retain their field meanings."""
+    libraries = Config.from_values(
+        family=IndexFamily.LIBRARIES,
+        values={"pinned_tools": "not-a-pinned-tool"},
+        environment={"PINNED_TOOLS": "also-not-a-pinned-tool"},
+    )
+    direct = Config(
+        IndexFamily.LIBRARIES,
+        "https://downloads.arduino.test/libraries/library_index.json",
+        _MIRROR,
+        TargetKind.LOCAL,
+        "",
+        "",
+        "",
+        "",
+        Path("mirror-out"),
+        False,
+        "",
+        "",
+        (),
+        (),
+        10,
+        1.0,
+    )
+    positional_plan = PublicationPlan(
+        IndexFamily.PACKAGES,
+        (),
+        (),
+        {"packages": []},
+        ("p/stale.zip",),
+    )
+
+    assert libraries.pinned_tools == ()
+    assert direct.pinned_tools == ()
+    assert positional_plan.stale_keys == ("p/stale.zip",)
+    assert positional_plan.skipped_pinned_tools == ()
+
+
+# endregion FUNC_test_library_pins_are_ignored_and_public_constructors_remain_compatible
 
 
 # region FUNC_test_pinned_tool_selection_adds_minimal_unconfigured_owner

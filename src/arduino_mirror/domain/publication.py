@@ -117,9 +117,9 @@ class PublicationPlan:
     releases: tuple[str, ...]
     archives: tuple[Archive, ...]
     index: dict[str, Any]
-    skipped_pinned_tools: tuple[PinnedToolSkip, ...] = ()
     stale_keys: tuple[str, ...] = ()
     _archives_to_publish: tuple[Archive, ...] | None = None
+    skipped_pinned_tools: tuple[PinnedToolSkip, ...] = ()
 
     # region METHOD_archive_keys
     # PURPOSE: Expose deterministic selected keys for reconciliation without duplicating archive descriptors in the plan.

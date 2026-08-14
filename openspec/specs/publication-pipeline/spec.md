@@ -31,7 +31,7 @@ whitespace around elements SHALL be ignored, malformed identities and empty
 elements SHALL fail configuration before source retrieval, and duplicate
 identities SHALL be retained once. An empty CLI or environment value SHALL not
 replace the default. The `packages` pipeline SHALL use the resolved list; the
-libraries pipeline SHALL not change its selection because of it.
+libraries pipeline SHALL ignore this setting, including malformed values.
 
 #### Scenario: CLI pins override environment pins
 
@@ -45,6 +45,12 @@ libraries pipeline SHALL not change its selection because of it.
 - **WHEN** an operator supplies
   `--pinned-tools builtin:ctags@5.8-arduino11,,builtin:serial-discovery@1.0.0`
 - **THEN** configuration fails before the source index is fetched
+
+#### Scenario: Ignore malformed pins for libraries
+
+- **WHEN** an operator runs `arduino-mirror libraries` with malformed
+  `--pinned-tools` or `PINNED_TOOLS`
+- **THEN** the library pipeline continues without resolving pinned tools
 
 ### Requirement: Family-specific index selection
 
