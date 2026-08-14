@@ -1,0 +1,49 @@
+---
+name: xod-fix-packages
+
+on:
+  schedule:
+    # Weekly, Sunday 06:17 UTC (avoid the :00 storm).
+    - cron: "17 6 * * 0"
+  workflow_dispatch: {} # Manual run from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xod-fix-publication
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rclone
+
+      - name: Build XOD fix packages
+        env:
+          MIRROR_HOST: "${{ vars.MIRROR_HOST }}"
+        run: scripts/build-xod-fix-packages.sh
+
+      - name: Validate archives
+        run: |
+          tar -tzf dist/xod-packages-linux-x86_64.tar.gz >/dev/null
+          unzip -Z1 dist/xod-packages-windows-x86_64.zip >/dev/null
+          tar -tzf dist/xod-packages-macos-x86_64.tar.gz >/dev/null
+
+      - name: Synchronize XOD fix packages
+        env:
+          TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
+          RCLONE_CONFIG_STORAGE_TYPE: s3
+          RCLONE_CONFIG_STORAGE_PROVIDER: Other
+          RCLONE_CONFIG_STORAGE_ACL: public-read
+          RCLONE_CONFIG_STORAGE_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
+          RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
+          RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
+        run: rclone sync dist "storage:${TARGET_BUCKET}/xod-fix/"
