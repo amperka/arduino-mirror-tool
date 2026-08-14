@@ -38,6 +38,7 @@ jobs:
           PACKAGES: "${{ vars.PACKAGES }}"
           PACKAGES_LOCAL_INDEX: "data/package_index_overlay.json"
           PINNED_TOOLS: ${{ vars.PINNED_TOOLS }}
+          PINNED_PLATFORMS: ${{ vars.PINNED_PLATFORMS }}
           TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
           TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
           TARGET_PREFIX: ""
