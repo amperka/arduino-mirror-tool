@@ -62,8 +62,15 @@ CLI values override non-empty environment variables, which override defaults.
 Important variables are `PACKAGES_INPUT_INDEX`, `LIBRARIES_INPUT_INDEX`,
 `MIRROR_HOST`, `TARGET_KIND`, `TARGET_BUCKET`, `TARGET_ENDPOINT`,
 `TARGET_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`ARCHITECTURES`, and `PACKAGES`. Archive bytes are held only in automatically
-cleaned temporary storage during publication.
+`ARCHITECTURES`, `PACKAGES`, and `PINNED_TOOLS`. Archive bytes are held only in
+automatically cleaned temporary storage during publication.
+
+The `packages` command also retains exact package tools from `--pinned-tools` or
+`PINNED_TOOLS`, formatted as comma-separated `packager:name@version`
+identities. The default is
+`builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0`. Pinned tools are
+added to the latest platform dependencies; malformed non-empty lists fail before
+the source index is fetched.
 
 ## Develop and test
 

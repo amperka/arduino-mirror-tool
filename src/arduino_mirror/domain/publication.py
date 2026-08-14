@@ -15,7 +15,14 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
-__all__ = ["Archive", "ArchiveUnavailableError", "IndexFamily", "PublicationPlan"]
+__all__ = [
+    "Archive",
+    "ArchiveUnavailableError",
+    "IndexFamily",
+    "PinnedTool",
+    "PinnedToolSkip",
+    "PublicationPlan",
+]
 
 
 # region CLASS_IndexFamily
@@ -54,6 +61,38 @@ class Archive:
 # endregion CLASS_Archive
 
 
+# region CLASS_PinnedTool
+# PURPOSE: Identify one exact Boards Manager tool release independently of a platform dependency.
+@dataclass(frozen=True, order=True)
+class PinnedTool:
+    """One exact package-owner, tool-name, and version identity."""
+
+    packager: str
+    name: str
+    version: str
+
+    @property
+    def identity(self) -> str:
+        """Return the stable operator-facing identity for this tool."""
+        return f"{self.packager}:{self.name}@{self.version}"
+
+
+# endregion CLASS_PinnedTool
+
+
+# region CLASS_PinnedToolSkip
+# PURPOSE: Carry the non-secret reason an explicitly requested tool cannot appear in a publication plan.
+@dataclass(frozen=True)
+class PinnedToolSkip:
+    """One skipped pinned tool and its selection reason."""
+
+    tool: PinnedTool
+    reason: str
+
+
+# endregion CLASS_PinnedToolSkip
+
+
 # region CLASS_ArchiveUnavailableError
 # PURPOSE: Identify one archive that a target could not make available so the application can safely select an older release.
 class ArchiveUnavailableError(RuntimeError):
@@ -78,6 +117,7 @@ class PublicationPlan:
     releases: tuple[str, ...]
     archives: tuple[Archive, ...]
     index: dict[str, Any]
+    skipped_pinned_tools: tuple[PinnedToolSkip, ...] = ()
     stale_keys: tuple[str, ...] = ()
     _archives_to_publish: tuple[Archive, ...] | None = None
 

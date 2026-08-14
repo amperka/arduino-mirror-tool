@@ -22,7 +22,7 @@ from arduino_mirror.application import (
     LatestPackagesPolicy,
     PublishFamily,
 )
-from arduino_mirror.domain import IndexFamily
+from arduino_mirror.domain import IndexFamily, PinnedTool
 from arduino_mirror.entrypoints.config import Config, TargetKind
 from arduino_mirror.entrypoints.signals import PublicationCancelledError
 from tests.doubles import (
@@ -57,6 +57,7 @@ def run_fixture_flow(
             origin_host=origin,
             architectures=config.architectures,
             package_names=config.package_names,
+            pinned_tools=config.pinned_tools,
         )
         if config.family is IndexFamily.PACKAGES
         else LatestLibrariesPolicy(mirror_host=config.mirror_host, origin_host=origin)
@@ -380,6 +381,7 @@ def test_package_selection_falls_back_when_required_tool_is_unavailable() -> Non
         origin_host="https://downloads.arduino.test",
         architectures=("avr",),
         package_names=("arduino",),
+        pinned_tools=(PinnedTool("arduino", "tool", "1.1"),),
     )
 
     plan = policy.select(
@@ -444,6 +446,9 @@ def test_package_selection_falls_back_when_required_tool_is_unavailable() -> Non
         "p/cores/avr-1.0.0.tar.bz2",
         "p/tools/tool-1.0.zip",
     )
+    assert [skip.tool for skip in plan.skipped_pinned_tools] == [
+        PinnedTool("arduino", "tool", "1.1")
+    ]
 
 
 # endregion FUNC_test_package_selection_falls_back_when_required_tool_is_unavailable
