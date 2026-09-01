@@ -641,7 +641,7 @@ wheels = [
 
 [[package]]
 name = "mdlint"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ignore-python" },
@@ -650,9 +650,9 @@ dependencies = [
     { name = "rich" },
     { name = "rich-click" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/22/d8e5636d6a038405dbcdf37843540a60cc4e992c30279880633e35bd7954/mdlint-0.2.0.tar.gz", hash = "sha256:c5696427c1e034c4467668a0e398a68876f25068a9580f1b7feda6f9ce21cfd6", size = 80475, upload-time = "2026-05-07T20:00:17.884Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/8a/ecbbdba71b390e2289619dfff8286ece8a558f7df87d8f9915901affe3e3/mdlint-0.3.0.tar.gz", hash = "sha256:a77e73f5a5e286193fd49c1c536d196a30d4313f07090f0c1e63224c9145c05b", size = 81607, upload-time = "2026-08-07T19:12:08.593Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/d0/af31460b108598542ec47f9cd57f385ddef398e93530aec51b8826b85c59/mdlint-0.2.0-py3-none-any.whl", hash = "sha256:fb22702b076660895fdfc9afe9ec3d380f16a025bae5c0b284aad872b49aa705", size = 126145, upload-time = "2026-05-07T20:00:16.702Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/df/1130d3d89b41bf86baed898514f0bf023d20e63c135a16f2aa2c663cc21f/mdlint-0.3.0-py3-none-any.whl", hash = "sha256:c1ffaa5f332568a56da409bb04555e7d8ecb8bea221b14686f17ad7d3f6943b1", size = 127241, upload-time = "2026-08-07T19:12:06.901Z" },
 ]
 
 [[package]]
