@@ -9,9 +9,13 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: xod-fix-publication
+
+env:
+  TARGET_BUCKET: "amperka-arduino-downloads"
 
 jobs:
   publish:
@@ -37,13 +41,18 @@ jobs:
           unzip -Z1 dist/xod-packages-windows-x86_64.zip >/dev/null
           tar -tzf dist/xod-packages-macos-x86_64.tar.gz >/dev/null
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WIF_PROVIDER }}"
+          service_account: "${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}"
+          create_credentials_file: true
+          export_environment_variables: true
+
       - name: Synchronize XOD fix packages
         env:
-          TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
-          RCLONE_CONFIG_STORAGE_TYPE: s3
-          RCLONE_CONFIG_STORAGE_PROVIDER: Other
-          RCLONE_CONFIG_STORAGE_ACL: public-read
-          RCLONE_CONFIG_STORAGE_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
-          RCLONE_CONFIG_STORAGE_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
-          RCLONE_CONFIG_STORAGE_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
+          RCLONE_CONFIG_STORAGE_TYPE: "google cloud storage"
+          RCLONE_CONFIG_STORAGE_ENV_AUTH: "true"
+          RCLONE_CONFIG_STORAGE_BUCKET_POLICY_ONLY: "true"
+          RCLONE_CONFIG_STORAGE_NO_CHECK_BUCKET: "true"
         run: rclone sync dist "storage:${TARGET_BUCKET}/xod-fix/"

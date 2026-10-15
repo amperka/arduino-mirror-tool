@@ -17,6 +17,7 @@ prototypes.
 | `archive-index-layout` | Public archive URLs and target object-key layout |
 | `network-retry` | Transient HTTP, S3-compatible, and GCS retry policy |
 | `archive-availability-fallback` | Replanning after a permanently unavailable archive |
+| `xod-fix-package-publication` | XOD archive builds and isolated synchronization to the shared GCS bucket |
 
 ## Traceability
 
@@ -26,6 +27,7 @@ prototypes.
 | `archive-index-layout` | `domain/publication.py`, `application/selection_common.py`, `entrypoints/config.py` | selection, local-target, S3-target, and GCS-target tests |
 | `network-retry` | `infra/retry.py`, HTTP source, archive downloader, S3 and GCS targets | retry, HTTP-source, archive-download, S3-target, and GCS-target tests |
 | `archive-availability-fallback` | `domain/publication.py`, selection policies, publication use case | fallback selection and publication tests |
+| `xod-fix-package-publication` | XOD build script and GitHub Actions workflow | shared GCS bucket/WIF workflow contract; offline rclone authentication smoke |
 
 The retry specification explicitly records one verified current limitation:
 MinIO listing errors raised while consuming its iterator are not retried. The

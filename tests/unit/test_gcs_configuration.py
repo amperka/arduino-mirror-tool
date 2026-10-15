@@ -157,3 +157,61 @@ def test_production_workflows_use_only_wif_secrets(family) -> None:
 
 
 # endregion FUNC_test_production_workflows_use_only_wif_secrets
+
+
+# region FUNC_test_xod_workflow_shares_gcs_bucket_and_wif_without_s3_secrets
+# PURPOSE: Keep every production artifact in the same GCS bucket while limiting XOD sync and deletion to xod-fix/.
+def test_xod_workflow_shares_gcs_bucket_and_wif_without_s3_secrets() -> None:
+    workflows = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+    text = (workflows / "xod-fix-packages.yml").read_text(encoding="utf-8")
+    xod = yaml.safe_load(text)
+    library = yaml.safe_load(
+        (workflows / "mirror-libraries.yml").read_text(encoding="utf-8")
+    )
+    assert xod["permissions"] == library["permissions"]
+    assert xod["env"]["TARGET_BUCKET"] == library["env"]["TARGET_BUCKET"]
+    assert xod["env"]["TARGET_BUCKET"] == "amperka-arduino-downloads"
+    assert xod["concurrency"] == {"group": "xod-fix-publication"}
+    triggers = xod.get("on", xod.get(True))  # PyYAML's YAML 1.1 treats `on` as True.
+    assert triggers == {"schedule": [{"cron": "17 6 * * 0"}], "workflow_dispatch": {}}
+    job = xod["jobs"]["publish"]
+    assert job["environment"] == "prod"
+    assert job["runs-on"] == "ubuntu-latest"
+    steps = job["steps"]
+    assert [step["name"] for step in steps] == [
+        "Checkout",
+        "Install rclone",
+        "Build XOD fix packages",
+        "Validate archives",
+        "Authenticate to Google Cloud",
+        "Synchronize XOD fix packages",
+    ]
+    assert steps[1]["run"] == (
+        "sudo apt-get update\nsudo apt-get install --yes rclone\n"
+    )
+    assert steps[2]["run"] == "scripts/build-xod-fix-packages.sh"
+    assert steps[2]["env"] == {"MIRROR_HOST": "${{ vars.MIRROR_HOST }}"}
+    assert steps[3]["run"].splitlines() == [
+        "tar -tzf dist/xod-packages-linux-x86_64.tar.gz >/dev/null",
+        "unzip -Z1 dist/xod-packages-windows-x86_64.zip >/dev/null",
+        "tar -tzf dist/xod-packages-macos-x86_64.tar.gz >/dev/null",
+    ]
+    assert steps[-2] == next(
+        step
+        for step in library["jobs"]["mirror"]["steps"]
+        if step.get("uses", "").startswith("google-github-actions/auth@")
+    )
+    assert steps[-1]["env"] == {
+        "RCLONE_CONFIG_STORAGE_TYPE": "google cloud storage",
+        "RCLONE_CONFIG_STORAGE_ENV_AUTH": "true",
+        "RCLONE_CONFIG_STORAGE_BUCKET_POLICY_ONLY": "true",
+        "RCLONE_CONFIG_STORAGE_NO_CHECK_BUCKET": "true",
+    }
+    assert steps[-1]["run"] == 'rclone sync dist "storage:${TARGET_BUCKET}/xod-fix/"'
+    assert re.findall(r"secrets\.([A-Z_]+)", text) == [
+        "GCP_WIF_PROVIDER",
+        "GCP_WIF_SERVICE_ACCOUNT",
+    ]
+
+
+# endregion FUNC_test_xod_workflow_shares_gcs_bucket_and_wif_without_s3_secrets

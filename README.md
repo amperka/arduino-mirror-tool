@@ -115,13 +115,18 @@ The integration and end-to-end suites use a local HTTP origin and exercise local
 storage and the real GCS SDK against a loopback JSON API stub. These tests do not
 validate live WIF/IAM or resumable uploads. Unit tests also validate storage
 client key mapping, retries, and cancellation without cloud credentials.
+An optional integration smoke uses a real rclone executable on `PATH` with
+synthetic ADC and loopback token/storage endpoints. It skips when the binary is
+unavailable, resolves to a user-configured shim, or rejects loopback STS URLs.
+It checks authentication/listing and a dry run, not GitHub OIDC, IAM, or uploads.
 
 ## Deployment
 
-The scheduled GitHub Actions workflows independently run `arduino-mirror packages`
-and `arduino-mirror libraries` in the `prod` environment. Both publish to the
-existing GCS bucket `gs://amperka-arduino-downloads`, with no outer key prefix.
-The public host remains `https://arduino-downloads.amperka.ru`.
+All three scheduled publication workflows use the `prod` environment and the
+same existing GCS bucket, `gs://amperka-arduino-downloads`. The independent
+`arduino-mirror packages` and `arduino-mirror libraries` pipelines own `p/` and
+`l/`; the XOD workflow owns `xod-fix/`. The public host remains
+`https://arduino-downloads.amperka.ru`.
 
 Configure these repository secrets (or `prod` environment secrets):
 
@@ -132,8 +137,9 @@ Configure these repository secrets (or `prod` environment secrets):
 
 The workflows grant `id-token: write` and use
 [`google-github-actions/auth@v3`](https://github.com/google-github-actions/auth)
-to export an ADC credential file. The SDK uses these refreshable credentials;
-no static access token, service-account key, S3 endpoint, or HMAC key is needed.
+to export an ADC credential file. The Python SDK and rclone use these refreshable
+credentials; no static access token, service-account key, S3 endpoint, or HMAC key
+is needed.
 Generated `gha-creds-*.json` files are ignored by Git and removed by the auth
 action after the job.
 
@@ -163,14 +169,20 @@ The packages workflow preserves the local package overlay and resolves
 `PINNED_PLATFORMS` from GitHub variables. The libraries workflow also resolves
 `MIRROR_HOST` from GitHub variables. Empty values retain the CLI defaults.
 
-After an authorized first production run of **both mirror workflows**, verify the
-public indexes at `/p/packages/package_index.json` and
-`/l/libraries/library_index.json` and download at least one archive from each.
-These two workflows never read legacy S3 secrets, so those secrets cannot redirect
-the mirror pipelines back to the old target.
+The `xod-fix-packages` workflow keeps its existing build and archive validation,
+then uses [rclone's native GCS backend](https://rclone.org/googlecloudstorage/#application-default-credentials)
+with ADC to synchronize `dist/` only to
+`gs://amperka-arduino-downloads/xod-fix/`. Bucket-policy-only mode omits object
+ACLs; public downloads use the existing bucket IAM. The workflow skips bucket
+creation/existence checks, and its stale cleanup never targets `p/` or `l/`.
 
-The separate `xod-fix-packages` workflow still publishes through rclone/S3 and
-requires `TARGET_BUCKET`, `TARGET_ENDPOINT`, `TARGET_ACCESS_KEY_ID`, and
-`TARGET_SECRET_ACCESS_KEY`. Keep those secrets and storage keys until that
-workflow has been migrated and verified separately. Local/S3 CLI support remains
-available, and the CLI default remains `s3`. No secrets are deleted automatically.
+After authorized first production runs of **all three workflows**, verify the
+public indexes at `/p/packages/package_index.json` and
+`/l/libraries/library_index.json`, download at least one archive from each, and
+check all three XOD archives under `/xod-fix/`. None of these workflows reads
+legacy `TARGET_BUCKET`, `TARGET_ENDPOINT`, `TARGET_ACCESS_KEY_ID`, or
+`TARGET_SECRET_ACCESS_KEY` secrets. Retire those secrets and old storage keys
+only after these checks and confirmation that they have no other consumers.
+Local/S3 CLI support remains available, and the CLI default remains `s3`.
+No secrets or keys are deleted automatically. This change does not copy existing
+objects from the old bucket.

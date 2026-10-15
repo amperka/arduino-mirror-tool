@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Define the build and scheduled S3 publication contract for XOD bootstrap
-`__packages__` archives.
+Define the build and scheduled publication of XOD bootstrap `__packages__`
+archives into the GCS bucket shared with the package and library mirrors.
 
 ## Requirements
 
@@ -34,50 +34,57 @@ and operator output SHALL be technical English.
 ### Requirement: Scheduled XOD archive publication
 
 The repository SHALL provide a GitHub Actions workflow that runs every Sunday
-at 06:17 UTC and supports `workflow_dispatch`. It SHALL run on
-`ubuntu-latest` in the `prod` environment with read-only repository contents,
-install rclone from APT, set `MIRROR_HOST` from `vars.MIRROR_HOST`, and invoke
-the XOD build script. It SHALL not use the Python application, its dependency
-installation, AWS CLI, or a third-party GitHub Action for S3 publication.
+at 06:17 UTC and supports `workflow_dispatch`. It SHALL use `ubuntu-latest`, the
+`prod` environment, read-only repository contents, and `id-token: write`.
+It SHALL install rclone from APT, set `MIRROR_HOST` from `vars.MIRROR_HOST`, and
+invoke the unchanged XOD build script. It SHALL NOT use the Python application,
+its dependency installation, or AWS CLI.
 
 #### Scenario: Scheduled build
 
 - **WHEN** the Sunday 06:17 UTC schedule fires
-- **THEN** the workflow builds all three XOD archives using the configured
-  production mirror
+- **THEN** the workflow builds all three XOD archives using the configured mirror
 
 #### Scenario: Manual build
 
 - **WHEN** an operator starts the workflow from the Actions UI
 - **THEN** it performs the same build and publication flow as a scheduled run
 
-### Requirement: Isolated XOD S3 synchronization
+### Requirement: Shared GCS authentication and destination
 
-Before publishing, the workflow SHALL verify that the Linux and macOS tarballs
-and the Windows ZIP archive can each have their file lists read. It SHALL
-serialize runs in the `xod-fix-publication` concurrency group without
-cancelling an active run. It SHALL configure an rclone S3 remote named
-`storage` with provider `Other` and ACL `public-read`; it SHALL map the
-existing `TARGET_ENDPOINT`, `TARGET_ACCESS_KEY_ID`, and
-`TARGET_SECRET_ACCESS_KEY` secrets to that remote's endpoint and access-key
-environment variables. It SHALL run an rclone synchronization from `dist/` to
-`storage:${TARGET_BUCKET}/xod-fix/`, making only that prefix match the build
-output, including removal of destination-only objects. A failed build,
-validation, or synchronization SHALL fail the workflow and SHALL not report a
-successful publication.
+The XOD workflow SHALL use `google-github-actions/auth@v3` after checkout to export
+refreshable ADC using `GCP_WIF_PROVIDER` and `GCP_WIF_SERVICE_ACCOUNT`. It SHALL
+publish to the existing `amperka-arduino-downloads` bucket, the same bucket as the
+packages and libraries workflows, without reading legacy S3 secrets or using a
+service-account key or fixed access token.
+
+#### Scenario: One production artifact bucket
+
+- **WHEN** the three publication workflows are configured
+- **THEN** all target `amperka-arduino-downloads` using the same WIF secrets and
+  the `prod` environment
+
+### Requirement: Isolated XOD GCS synchronization
+
+The workflow SHALL validate all three archive file lists before synchronization.
+It SHALL serialize runs in `xod-fix-publication` without cancelling active runs.
+It SHALL configure rclone's native GCS remote `storage` to use ADC and bucket-level
+IAM, without setting object ACLs or checking/creating buckets. Synchronization
+SHALL make only `amperka-arduino-downloads/xod-fix/` match `dist/`, including removal
+of destination-only objects. Failed builds, validation, or sync SHALL fail the job.
 
 #### Scenario: Successful prefix reconciliation
 
-- **WHEN** all three archives are listable and rclone synchronization succeeds
-- **THEN** `xod-fix/` contains the current build output with publicly readable
-  object ACLs and no destination-only objects
+- **WHEN** all three archives are valid and synchronization succeeds
+- **THEN** `xod-fix/` contains the current output and no stale objects, while `p/`,
+  `l/`, and other prefixes are untouched; public access follows existing bucket IAM
 
 #### Scenario: Invalid archive
 
-- **WHEN** any generated archive cannot have its file list read
-- **THEN** the workflow fails before it starts S3 synchronization
+- **WHEN** a generated archive cannot have its file list read
+- **THEN** the workflow fails before it starts GCS synchronization
 
 #### Scenario: Overlapping triggers
 
-- **WHEN** a manual run begins while a scheduled XOD publication is active
+- **WHEN** a manual run starts during an active scheduled XOD publication
 - **THEN** the later run waits without cancelling the active run
