@@ -19,13 +19,15 @@ from arduino_mirror.application import (
     LatestPackagesPolicy,
     PublishFamily,
 )
-from arduino_mirror.domain import IndexFamily, SelectionPolicy
+from arduino_mirror.domain import IndexFamily, IndexSource, SelectionPolicy
 from arduino_mirror.infra import (
     GcsPublicationTarget,
     HttpIndexSource,
+    LocalOverlayIndexSource,
     LocalPublicationTarget,
     RetryPolicy,
     S3PublicationTarget,
+    S3TargetSettings,
 )
 
 from .config import Config, TargetKind
@@ -43,10 +45,12 @@ def make_publication_use_case(config: Config) -> PublishFamily:
         max_attempts=config.retry_attempts,
         base_delay=config.retry_base_delay,
     )
-    source = HttpIndexSource(
+    source: IndexSource = HttpIndexSource(
         urls={config.family: config.input_index},
         retry_policy=retry_policy,
     )
+    if config.local_index is not None:
+        source = LocalOverlayIndexSource(source=source, path=config.local_index)
     target: LocalPublicationTarget | S3PublicationTarget | GcsPublicationTarget
     match config.target:
         case TargetKind.GCS:
@@ -65,13 +69,15 @@ def make_publication_use_case(config: Config) -> PublishFamily:
             )
         case TargetKind.S3:
             target = S3PublicationTarget(
-                bucket=config.bucket,
-                endpoint=config.endpoint,
-                access_key=config.access_key,
-                secret_key=config.secret_key,
-                region=config.region,
-                index_key=config.index_key,
-                prefix=config.prefix,
+                S3TargetSettings(
+                    bucket=config.bucket,
+                    endpoint=config.endpoint,
+                    access_key=config.access_key,
+                    secret_key=config.secret_key,
+                    region=config.region,
+                    index_key=config.index_key,
+                    prefix=config.prefix,
+                ),
                 retry_policy=retry_policy,
             )
     policy = _policy_for(config)
@@ -93,6 +99,8 @@ def _policy_for(config: Config) -> SelectionPolicy:
             origin_host=_origin_of(config.input_index),
             architectures=config.architectures,
             package_names=config.package_names,
+            pinned_tools=config.pinned_tools,
+            pinned_platforms=config.pinned_platforms,
         )
     return LatestLibrariesPolicy(
         mirror_host=config.mirror_host,

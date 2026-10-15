@@ -110,7 +110,6 @@ def test_production_workflows_use_only_wif_secrets(family) -> None:
     assert workflow["env"]["TARGET_KIND"] == "gcs"
     assert workflow["env"]["TARGET_BUCKET"] == "amperka-arduino-downloads"
     assert workflow["env"]["TARGET_PREFIX"] == ""
-    assert workflow["env"]["MIRROR_HOST"] == "https://arduino-downloads.amperka.ru"
     job = workflow["jobs"]["mirror"]
     assert job["environment"] == "prod"
     steps = job["steps"]
@@ -142,6 +141,18 @@ def test_production_workflows_use_only_wif_secrets(family) -> None:
         if step.get("run", "").startswith("uv run arduino-mirror")
     ] == [f"uv run arduino-mirror {family}"]
     assert steps[-1]["run"] == f"uv run arduino-mirror {family}"
+    publish_environment = {"MIRROR_HOST": "${{ vars.MIRROR_HOST }}"}
+    if family == "packages":
+        publish_environment.update(
+            {
+                "ARCHITECTURES": "${{ vars.ARCHITECTURES }}",
+                "PACKAGES": "${{ vars.PACKAGES }}",
+                "PACKAGES_LOCAL_INDEX": "data/package_index_overlay.json",
+                "PINNED_TOOLS": "${{ vars.PINNED_TOOLS }}",
+                "PINNED_PLATFORMS": "${{ vars.PINNED_PLATFORMS }}",
+            }
+        )
+    assert steps[-1]["env"] == publish_environment
     assert workflow["concurrency"]["group"] == f"mirror-{family}-publication"
 
 

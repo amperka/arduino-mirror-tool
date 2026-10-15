@@ -1,7 +1,7 @@
 # region MODULE_CONTRACT
 # PURPOSE: Prove the operator-facing GCS CLI composes real HTTP/SDK adapters and previews both families without credentials or storage access.
 # SCOPE:
-# - In-process CLI against local HTTP origin and loopback Storage JSON API; credential-free dry-run commands.
+# - In-process CLI against local HTTP origin and loopback Storage JSON API; package overlays/pins and credential-free dry-run commands.
 # - NOT: Installed console-script subprocess, WIF/ADC refresh, IAM, or live GCS; the shared stub covers small multipart uploads only.
 # KEYWORDS: e2e, GCS, CLI, offline, dry run
 # endregion MODULE_CONTRACT
@@ -83,6 +83,115 @@ def test_gcs_cli_publishes_through_real_sdk_without_s3_credentials(
 
 
 # endregion FUNC_test_gcs_cli_publishes_through_real_sdk_without_s3_credentials
+
+
+# region FUNC_test_gcs_cli_publishes_package_overlay_and_both_pins
+# PURPOSE: Preserve master's overlay and independent tool/platform pins through GCS composition and real SDK writes.
+def test_gcs_cli_publishes_package_overlay_and_both_pins(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    archives = {"board.tar.gz": b"pinned platform", "tool.tar.gz": b"pinned tool"}
+    for name, content in archives.items():
+        (source / name).write_bytes(content)
+    (source / "index.json").write_text('{"packages": []}', encoding="utf-8")
+    overlay = tmp_path / "packages-overlay.json"
+    environment = {
+        "TARGET_KIND": "gcs",
+        "TARGET_BUCKET": _BUCKET,
+        "TARGET_PREFIX": "managed",
+        "MIRROR_HOST": "https://mirror.test.invalid",
+        "ARCHITECTURES": "excluded",
+        "PACKAGES": "excluded",
+        "PINNED_TOOLS": "overlay:compiler@1.0.0",
+        "PINNED_PLATFORMS": "overlay:avr@1.0.0",
+        "PACKAGES_LOCAL_INDEX": str(overlay),
+        "LIBRARIES_LOCAL_INDEX": str(tmp_path / "must-not-read.json"),
+        "RETRY_ATTEMPTS": "2",
+        "RETRY_BASE_DELAY": "0",
+    }
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "DRY_RUN"):
+        monkeypatch.delenv(name, raising=False)
+
+    with _storage_api(monkeypatch) as service, _http_root(source) as origin:
+        overlay.write_text(
+            json.dumps(
+                {
+                    "packages": [
+                        {
+                            "name": "overlay",
+                            "platforms": [
+                                {
+                                    "architecture": "avr",
+                                    "version": "1.0.0",
+                                    "url": f"{origin}/board.tar.gz",
+                                    "size": len(archives["board.tar.gz"]),
+                                },
+                            ],
+                            "tools": [
+                                {
+                                    "name": "compiler",
+                                    "version": "1.0.0",
+                                    "systems": [
+                                        {
+                                            "host": "x86_64-pc-linux-gnu",
+                                            "url": f"{origin}/tool.tar.gz",
+                                            "size": len(archives["tool.tar.gz"]),
+                                        },
+                                        {
+                                            "host": "aarch64-apple-darwin",
+                                            "url": "https://vendor.invalid/tool.zip",
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ),
+            encoding="utf-8",
+        )
+        protected = {
+            "managed/l/protected.zip": b"library family",
+            "xod-fix/protected.tar.gz": b"separate XOD publication",
+        }
+        service.objects.update(protected)
+        service.objects["managed/p/obsolete.zip"] = b"old package"
+        result = main(["packages", "--input", f"{origin}/index.json"])
+
+    assert result == 0
+    assert capsys.readouterr().out == (
+        "packages: published 1 release(s), 2 archive(s), 1 stale\n"
+    )
+    assert service.events == [
+        ("list", "managed/p/"),
+        ("upload", "managed/p/board.tar.gz"),
+        ("upload", "managed/p/tool.tar.gz"),
+        ("upload", "managed/p/index.json"),
+        ("delete", "managed/p/obsolete.zip"),
+    ]
+    for name, content in archives.items():
+        assert service.objects[f"managed/p/{name}"] == content
+    assert {key: service.objects[key] for key in protected} == protected
+    index = json.loads(service.objects["managed/p/index.json"])
+    assert len(index["packages"]) == 1
+    package = index["packages"][0]
+    assert package["name"] == "overlay"
+    (platform,) = package["platforms"]
+    assert (platform["architecture"], platform["version"]) == ("avr", "1.0.0")
+    assert platform["url"] == "https://mirror.test.invalid/p/board.tar.gz"
+    (tool,) = package["tools"]
+    assert (tool["name"], tool["version"]) == ("compiler", "1.0.0")
+    assert [system["url"] for system in tool["systems"]] == [
+        "https://mirror.test.invalid/p/tool.tar.gz",
+        "https://vendor.invalid/tool.zip",
+    ]
+
+
+# endregion FUNC_test_gcs_cli_publishes_package_overlay_and_both_pins
 
 
 # region FUNC_test_gcs_cli_dry_run_never_constructs_client_or_discovers_adc

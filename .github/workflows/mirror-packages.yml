@@ -15,9 +15,6 @@ concurrency:
   group: mirror-packages-publication
 
 env:
-  MIRROR_HOST: "https://arduino-downloads.amperka.ru"
-  ARCHITECTURES: "avr,samd,sam,megaavr,mbed_nano,mbed_rp2040"
-  PACKAGES: "arduino,builtin"
   TARGET_KIND: "gcs"
   TARGET_BUCKET: "amperka-arduino-downloads"
   TARGET_PREFIX: ""
@@ -46,4 +43,11 @@ jobs:
           export_environment_variables: true
 
       - name: Publish packages
+        env:
+          MIRROR_HOST: "${{ vars.MIRROR_HOST }}"
+          ARCHITECTURES: "${{ vars.ARCHITECTURES }}"
+          PACKAGES: "${{ vars.PACKAGES }}"
+          PACKAGES_LOCAL_INDEX: "data/package_index_overlay.json"
+          PINNED_TOOLS: ${{ vars.PINNED_TOOLS }}
+          PINNED_PLATFORMS: ${{ vars.PINNED_PLATFORMS }}
         run: uv run arduino-mirror packages

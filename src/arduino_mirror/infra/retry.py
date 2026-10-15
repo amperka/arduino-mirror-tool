@@ -15,7 +15,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NotRequired, TypedDict, Unpack, overload
 
 import requests
 import urllib3.exceptions
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_RETRY_POLICY",
+    "RetryContext",
     "RetryPolicy",
     "is_transient_http",
     "is_transient_s3",
@@ -121,22 +122,74 @@ class RetryPolicy:
 DEFAULT_RETRY_POLICY = RetryPolicy()
 
 
+class _RetryContextArguments(TypedDict):
+    """Legacy keyword representation of optional retry controls."""
+
+    cancellation: NotRequired[PublicationCancellation | None]
+    sleep: NotRequired[Callable[[float], None]]
+    rng: NotRequired[random.Random | None]
+
+
+# region CLASS_RetryContext
+# PURPOSE: Group optional retry execution controls so production and deterministic callers share one engine contract.
+@dataclass(frozen=True)
+class RetryContext:
+    """Optional cancellation, sleep, and jitter dependencies for one retry call."""
+
+    cancellation: PublicationCancellation | None = None
+    sleep: Callable[[float], None] = time.sleep
+    rng: random.Random | None = None
+
+
+# endregion CLASS_RetryContext
+
+_DEFAULT_RETRY_CONTEXT = RetryContext()
+
+
 # region FUNC_retry_call
 # PURPOSE: Invoke one operation with bounded retries on transient failures while honoring cooperative cancellation.
-def retry_call[T](  # noqa: PLR0913
+@overload
+def retry_call[T](
     invoke: Callable[[], T],
     *,
     is_retriable: Callable[[BaseException], bool],
     policy: RetryPolicy = DEFAULT_RETRY_POLICY,
-    cancellation: PublicationCancellation | None = None,
-    sleep: Callable[[float], None] = time.sleep,
-    rng: random.Random | None = None,
+    context: RetryContext,
+) -> T: ...
+
+
+@overload
+def retry_call[T](
+    invoke: Callable[[], T],
+    *,
+    is_retriable: Callable[[BaseException], bool],
+    policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+    **context_arguments: Unpack[_RetryContextArguments],
+) -> T: ...
+
+
+def retry_call[T](
+    invoke: Callable[[], T],
+    *,
+    is_retriable: Callable[[BaseException], bool],
+    policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+    context: RetryContext | None = None,
+    **context_arguments: Unpack[_RetryContextArguments],
 ) -> T:
     """Return ``invoke()``'s result, retrying the transient failures ``is_retriable`` accepts."""
-    jitter = rng or _module_random
+    if context is None:
+        context = (
+            RetryContext(**context_arguments)
+            if context_arguments
+            else _DEFAULT_RETRY_CONTEXT
+        )
+    elif context_arguments:
+        msg = "pass either RetryContext or individual retry controls"
+        raise TypeError(msg)
+    jitter = context.rng or _module_random
     for attempt in range(1, policy.max_attempts + 1):
-        if cancellation is not None:
-            cancellation.check()
+        if context.cancellation is not None:
+            context.cancellation.check()
         try:
             return invoke()
         except Exception as error:
@@ -161,7 +214,7 @@ def retry_call[T](  # noqa: PLR0913
                     "max_attempts": policy.max_attempts,
                 },
             )
-            _interruptible_sleep(delay, cancellation, sleep)
+            _interruptible_sleep(delay, context)
     unreachable = "retry loop terminated without a result"
     raise RuntimeError(unreachable)  # pragma: no cover
 
@@ -169,23 +222,19 @@ def retry_call[T](  # noqa: PLR0913
 # endregion FUNC_retry_call
 
 
-def _interruptible_sleep(
-    delay: float,
-    cancellation: PublicationCancellation | None,
-    sleep: Callable[[float], None],
-) -> None:
+def _interruptible_sleep(delay: float, context: RetryContext) -> None:
     """Sleep for ``delay`` seconds in small chunks so cancellation stays responsive."""
-    if cancellation is not None:
-        cancellation.check()
+    if context.cancellation is not None:
+        context.cancellation.check()
     if delay <= 0:
         return
     remaining = delay
     while remaining > 0:
         chunk = min(_SLEEP_STEP_SECONDS, remaining)
-        sleep(chunk)
+        context.sleep(chunk)
         remaining -= chunk
-        if cancellation is not None:
-            cancellation.check()
+        if context.cancellation is not None:
+            context.cancellation.check()
 
 
 # region FUNC_is_transient_http

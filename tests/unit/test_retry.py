@@ -30,6 +30,7 @@ from arduino_mirror.entrypoints.config import (
 )
 from arduino_mirror.entrypoints.signals import PublicationCancelledError
 from arduino_mirror.infra.retry import (
+    RetryContext,
     RetryPolicy,
     is_transient_http,
     is_transient_s3,
@@ -134,7 +135,7 @@ def test_retry_call_retries_transient_then_succeeds(
         invoke,
         is_retriable=is_transient_http,
         policy=RetryPolicy(max_attempts=5, base_delay=0),
-        sleep=lambda _: None,
+        context=RetryContext(sleep=lambda _: None),
     )
     assert result == "ok"
     assert len(attempts) == _TRANSIENT_FAILURES_BEFORE_RECOVERY + 1
@@ -164,7 +165,7 @@ def test_retry_call_propagates_non_retriable_immediately() -> None:
             invoke,
             is_retriable=is_transient_http,
             policy=RetryPolicy(max_attempts=5, base_delay=0),
-            sleep=lambda _: None,
+            context=RetryContext(sleep=lambda _: None),
         )
     assert len(attempts) == 1
 
@@ -191,7 +192,7 @@ def test_retry_call_exhausts_and_raises_last(
             invoke,
             is_retriable=is_transient_http,
             policy=policy,
-            sleep=lambda _: None,
+            context=RetryContext(sleep=lambda _: None),
         )
     assert len(attempts) == policy.max_attempts
     exhausted = [
@@ -218,8 +219,7 @@ def test_retry_call_applies_exponential_backoff() -> None:
             invoke,
             is_retriable=is_transient_http,
             policy=RetryPolicy(max_attempts=3, base_delay=1.0, max_delay=30.0),
-            sleep=sleeps.append,
-            rng=CapRandom(),
+            context=RetryContext(sleep=sleeps.append, rng=CapRandom()),
         )
     assert sum(sleeps) == pytest.approx(3.0)
 
@@ -243,8 +243,7 @@ def test_retry_call_stops_on_cancellation_between_attempts() -> None:
             invoke,
             is_retriable=is_transient_http,
             policy=RetryPolicy(max_attempts=5, base_delay=0),
-            cancellation=cancellation,
-            sleep=lambda _: None,
+            context=RetryContext(cancellation=cancellation, sleep=lambda _: None),
         )
     assert len(attempts) == 1
 
@@ -269,9 +268,11 @@ def test_retry_call_sleep_is_interruptible_by_cancellation() -> None:
             invoke,
             is_retriable=is_transient_http,
             policy=RetryPolicy(max_attempts=5, base_delay=10.0),
-            cancellation=cancellation,
-            sleep=sleeps.append,
-            rng=CapRandom(),
+            context=RetryContext(
+                cancellation=cancellation,
+                sleep=sleeps.append,
+                rng=CapRandom(),
+            ),
         )
     assert len(attempts) == 1
     assert sleeps == [pytest.approx(0.2)]

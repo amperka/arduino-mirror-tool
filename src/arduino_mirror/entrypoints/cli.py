@@ -130,6 +130,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Source index URL; defaults depend on the selected family.",
     )
     parser.add_argument(
+        "--local-index",
+        help="Optional local JSON overlay; its environment variable depends on the selected family.",
+    )
+    parser.add_argument(
         "--mirror-host",
         help="Public base URL used when archive URLs are rewritten in the index.",
     )
@@ -155,6 +159,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--packages",
         dest="package_names",
         help="Comma-separated Boards Manager package names to retain; ignored for libraries.",
+    )
+    parser.add_argument(
+        "--pinned-tools",
+        help="Comma-separated exact package tools to retain as packager:name@version; ignored for libraries.",
+    )
+    parser.add_argument(
+        "--pinned-platforms",
+        help="Comma-separated exact package platforms to retain as packager:architecture@version; ignored for libraries.",
     )
     parser.add_argument(
         "--dry-run",

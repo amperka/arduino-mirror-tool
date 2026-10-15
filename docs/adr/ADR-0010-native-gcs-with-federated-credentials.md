@@ -1,6 +1,6 @@
 # ADR-0010: Publish to GCS with native SDK and federated credentials
 
-- **Status:** Accepted
+- **Status:** Proposed
 - **Date:** 2026-10-16
 - **Supersedes:**
 - **Superseded by:**

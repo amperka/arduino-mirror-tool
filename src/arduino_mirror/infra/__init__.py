@@ -11,17 +11,21 @@
 from .archive_tempfile import ArchiveVerificationError, download_verified
 from .gcs_target import GcsPublicationTarget
 from .http_source import HttpIndexSource
+from .local_overlay_source import LocalOverlayIndexSource
 from .local_target import LocalPublicationTarget
-from .retry import DEFAULT_RETRY_POLICY, RetryPolicy
-from .s3_target import S3PublicationTarget
+from .retry import DEFAULT_RETRY_POLICY, RetryContext, RetryPolicy
+from .s3_target import S3PublicationTarget, S3TargetSettings
 
 __all__ = [
     "DEFAULT_RETRY_POLICY",
     "ArchiveVerificationError",
     "GcsPublicationTarget",
     "HttpIndexSource",
+    "LocalOverlayIndexSource",
     "LocalPublicationTarget",
+    "RetryContext",
     "RetryPolicy",
     "S3PublicationTarget",
+    "S3TargetSettings",
     "download_verified",
 ]

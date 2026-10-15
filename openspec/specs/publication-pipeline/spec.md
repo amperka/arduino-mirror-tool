@@ -10,9 +10,10 @@ an S3-compatible target, or a GCS bucket.
 
 The system SHALL expose `packages` and `libraries` commands. Each invocation
 SHALL operate on exactly one `IndexFamily`, fetch only that family's configured
-input index, and never begin the other family's pipeline. CLI values SHALL take
-precedence over non-empty environment values, which SHALL take precedence over
-defaults. `--dry-run` SHALL select and report a plan without reconciling or
+input index and optionally merge only that family's configured local overlay
+before selection, and never begin the other family's pipeline. CLI values SHALL
+take precedence over non-empty environment values, which SHALL take precedence
+over defaults. `--dry-run` SHALL select and report a plan without reconciling or
 mutating a target.
 
 #### Scenario: Preview library publication
@@ -21,22 +22,71 @@ mutating a target.
 - **THEN** the system fetches and selects the library index but performs no target
   read, archive download, upload, index replacement, or cleanup
 
+#### Scenario: Family-scoped overlay selection
+
+- **WHEN** an operator runs `arduino-mirror packages` with
+  `PACKAGES_LOCAL_INDEX` and `LIBRARIES_LOCAL_INDEX` both configured
+- **THEN** the system merges only the packages overlay before packages selection
+  and does not read the libraries overlay
+
+### Requirement: Pinned package selection configuration
+
+The system SHALL resolve exact pinned package-tool identities from
+`--pinned-tools`, then non-empty `PINNED_TOOLS`, then the default
+`builtin:ctags@5.8-arduino11,builtin:serial-discovery@1.0.0`. It SHALL resolve
+exact pinned package-platform identities from `--pinned-platforms`, then
+non-empty `PINNED_PLATFORMS`, then the empty default. A resolved non-empty tool
+or platform list SHALL be comma-separated `packager:name@version` or
+`packager:architecture@version` identities respectively; whitespace around
+elements SHALL be ignored, malformed identities and empty elements SHALL fail
+configuration before source retrieval, and duplicate identities SHALL be
+retained once. An empty CLI or environment value SHALL not replace its default.
+The `packages` pipeline SHALL use both resolved lists; the `libraries` pipeline
+SHALL ignore both settings, including malformed values.
+
+#### Scenario: CLI pins override environment pins
+
+- **WHEN** `arduino-mirror packages --pinned-tools builtin:ctags@5.8-arduino11 --pinned-platforms arduino:avr@1.8.8`
+  runs with `PINNED_TOOLS=builtin:serial-discovery@1.0.0` and
+  `PINNED_PLATFORMS=arduino:samd@1.8.14`
+- **THEN** the package policy receives only `builtin:ctags@5.8-arduino11` as a
+  tool pin and only `arduino:avr@1.8.8` as a platform pin
+
+#### Scenario: Reject a malformed pinned platform list
+
+- **WHEN** an operator supplies
+  `--pinned-platforms arduino:avr@1.8.8,,arduino:samd@1.8.14`
+- **THEN** configuration fails before the source index is fetched
+
+#### Scenario: Ignore malformed pins for libraries
+
+- **WHEN** an operator runs `arduino-mirror libraries` with malformed
+  `--pinned-tools`, `PINNED_TOOLS`, `--pinned-platforms`, or `PINNED_PLATFORMS`
+- **THEN** the library pipeline continues without resolving pinned tools or
+  platforms
+
 ### Requirement: Family-specific index selection
 
 The system SHALL use separate selection policies for the two Arduino index
 formats. For configured package names and architectures, the package policy
 SHALL retain the newest eligible configured-origin platform per architecture and
-the exact tool versions required by each retained platform. For a configured
-package with no platforms, it SHALL retain the newest eligible tool version per
-tool name. The library policy SHALL retain the newest eligible configured-origin
-release per exact library name. For library releases with the same base version,
-SemVer numeric prerelease identifiers SHALL have lower precedence than textual
-prerelease identifiers at the same identifier position; stable releases SHALL
-have higher precedence than prereleases. Library records, and configured
-package/platform records, outside the configured origin SHALL remain unchanged
-and SHALL create no mirror archive work. Selected origin archive URLs SHALL be
-rewritten to the configured mirror host while other retained record fields are
-preserved.
+the exact tool versions required by each retained platform. It SHALL additionally
+retain each eligible exact configured pinned tool identity and each eligible
+exact configured pinned platform identity from the complete package index,
+independently of configured package names and architectures. Platform pins use
+the exact package owner, platform architecture, and platform version; they
+SHALL not select a replacement version. For a configured package with no platforms, it SHALL retain the
+newest eligible tool version per tool name. The library policy SHALL retain the
+newest eligible configured-origin release per exact library name. For library
+releases with the same base version, SemVer numeric prerelease identifiers SHALL
+have lower precedence than textual prerelease identifiers at the same identifier
+position; stable releases SHALL have higher precedence than prereleases. Library
+records, and configured package/platform records, outside the configured origin
+SHALL remain unchanged and SHALL create no mirror archive work. Selected origin
+archive URLs SHALL be rewritten to the configured mirror host while other
+retained record fields are preserved. Each retained package entry SHALL contain
+only selected platforms and the union of dependency-selected and pinned tools;
+an entry retained solely for a pinned tool SHALL have no platforms.
 
 #### Scenario: Preserve an external library release
 
@@ -50,6 +100,46 @@ preserved.
 - **WHEN** eligible origin releases for one library are `1.0.0-1` and
   `1.0.0-alpha`
 - **THEN** the selected release is `1.0.0-alpha`
+
+#### Scenario: Mirror an exact pin outside configured package names and architectures
+
+- **WHEN** `arduino:avr@1.8.8` is pinned and `arduino` and `avr` are absent
+  from the configured package names and architectures
+- **THEN** the generated package index contains the exact selected `avr`
+  platform, its exact tool dependencies, and its eligible origin archive
+  descriptors
+
+#### Scenario: Mirror an exact tool pin outside configured package names
+
+- **WHEN** `builtin:ctags@5.8-arduino11` is pinned and `builtin` is absent from
+  configured package names
+- **THEN** the generated package index contains a `builtin` entry with an empty
+  `platforms` list, the exact selected `ctags` tool, and its eligible origin
+  archive descriptors
+
+#### Scenario: Skip an unavailable pinned tool
+
+- **WHEN** every source record for a pinned exact tool is absent or one of its
+  required origin system archives is unavailable
+- **THEN** the generated index omits that exact tool, selects no replacement
+  version for it, and the command emits one warning for that pinned identity with
+  the reason
+
+#### Scenario: Skip an unavailable pinned platform
+
+- **WHEN** every source record for a pinned exact platform is absent, its
+  platform archive is unavailable, or one of its exact required tool archives
+  is unavailable
+- **THEN** the generated index omits that exact platform, selects no replacement
+  version for it, and the command emits one warning for that pinned identity
+  with the reason
+
+#### Scenario: Retain platform fallback for an unavailable pinned dependency
+
+- **WHEN** a selected latest platform requires an exact tool that is also pinned
+  and an origin system archive for that tool is unavailable
+- **THEN** the platform is ineligible and the package policy selects the newest
+  older available platform for its architecture
 
 ### Requirement: Verified archive publication
 
@@ -151,7 +241,7 @@ credentials.
 
 The system SHALL support `--target gcs` and `TARGET_KIND=gcs` using ADC. A preview
 SHALL NOT discover cloud credentials or construct an authenticated storage client.
-Production workflows SHALL export ADC using `GCP_WIF_PROVIDER` and
+Production family workflows SHALL export ADC using `GCP_WIF_PROVIDER` and
 `GCP_WIF_SERVICE_ACCOUNT` with `id-token: write` and SHALL publish independently
 to `amperka-arduino-downloads` without reading legacy S3 secrets.
 
@@ -160,6 +250,13 @@ to `amperka-arduino-downloads` without reading legacy S3 secrets.
 - **WHEN** either production family workflow runs
 - **THEN** it authenticates using WIF after checkout, uses the `prod` environment,
   and publishes only its configured family to GCS
+
+#### Scenario: Preserve package overlays and pins with a GCS target
+
+- **WHEN** a packages publication to GCS configures an overlay and exact tool and
+  platform pins outside the normal package and architecture filters
+- **THEN** selection uses the merged index and both pins, publishing verified
+  configured-origin archives and preserving external overlay archive URLs
 
 #### Scenario: Preview without cloud credentials
 

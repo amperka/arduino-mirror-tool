@@ -14,13 +14,26 @@ from .ports import (
     PublicationTarget,
     SelectionPolicy,
 )
-from .publication import Archive, ArchiveUnavailableError, IndexFamily, PublicationPlan
+from .publication import (
+    Archive,
+    ArchiveUnavailableError,
+    IndexFamily,
+    PinnedPlatform,
+    PinnedPlatformSkip,
+    PinnedTool,
+    PinnedToolSkip,
+    PublicationPlan,
+)
 
 __all__ = [
     "Archive",
     "ArchiveUnavailableError",
     "IndexFamily",
     "IndexSource",
+    "PinnedPlatform",
+    "PinnedPlatformSkip",
+    "PinnedTool",
+    "PinnedToolSkip",
     "PublicationCancellation",
     "PublicationPlan",
     "PublicationTarget",
