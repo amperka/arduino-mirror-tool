@@ -135,10 +135,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["s3", "local"],
-        help="Publication target: s3 for S3-compatible storage or local for a directory.",
+        choices=["s3", "local", "gcs"],
+        help="Publication target: s3, gcs (Application Default Credentials), or local.",
     )
-    parser.add_argument("--bucket", help="Destination S3 bucket name.")
+    parser.add_argument("--bucket", help="Destination S3 or GCS bucket name.")
     parser.add_argument(
         "--prefix", help="Optional key prefix within the publication target."
     )

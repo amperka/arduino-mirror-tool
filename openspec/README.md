@@ -15,16 +15,16 @@ prototypes.
 | --- | --- |
 | `publication-pipeline` | Commands, selection, verified publication, cancellation, and observability |
 | `archive-index-layout` | Public archive URLs and target object-key layout |
-| `network-retry` | Transient HTTP and S3-compatible retry policy |
+| `network-retry` | Transient HTTP, S3-compatible, and GCS retry policy |
 | `archive-availability-fallback` | Replanning after a permanently unavailable archive |
 
 ## Traceability
 
 | Capability | Implementation | Executable evidence |
 | --- | --- | --- |
-| `publication-pipeline` | `application/publication.py`, selection policies, CLI, local and S3 targets | unit selection tests; local integration; CLI e2e |
-| `archive-index-layout` | `domain/publication.py`, `application/selection_common.py`, `entrypoints/config.py` | selection, local-target, and S3-target tests |
-| `network-retry` | `infra/retry.py`, HTTP source, archive downloader, S3 target | retry, HTTP-source, archive-download, and S3-target tests |
+| `publication-pipeline` | `application/publication.py`, selection policies, CLI, local, S3 and GCS targets | unit selection/target tests; local HTTP/GCS SDK integration; CLI e2e |
+| `archive-index-layout` | `domain/publication.py`, `application/selection_common.py`, `entrypoints/config.py` | selection, local-target, S3-target, and GCS-target tests |
+| `network-retry` | `infra/retry.py`, HTTP source, archive downloader, S3 and GCS targets | retry, HTTP-source, archive-download, S3-target, and GCS-target tests |
 | `archive-availability-fallback` | `domain/publication.py`, selection policies, publication use case | fallback selection and publication tests |
 
 The retry specification explicitly records one verified current limitation:

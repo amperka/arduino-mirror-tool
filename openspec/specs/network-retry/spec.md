@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define bounded recovery from transient failures at HTTP and S3-compatible
+Define bounded recovery from transient failures at HTTP, S3-compatible, and GCS
 publication boundaries.
 
 ## Requirements
@@ -10,7 +10,7 @@ publication boundaries.
 ### Requirement: Bounded transient retry
 
 The system SHALL retry transient failures during index retrieval, archive
-download, and S3-compatible archive/index writes and stale-object removals using
+download, and S3-compatible/GCS archive/index writes and stale-object removals using
 a bounded full-jitter exponential-backoff schedule. It SHALL retry HTTP/S3-compatible
 throttling (429), server failures (5xx), and eligible transport failures,
 including mid-stream transfer failures. Once the configured attempt budget is
@@ -72,3 +72,27 @@ SHALL not include credentials.
 - **WHEN** an operator supplies `--retry-attempts 4 --retry-base-delay 2.5`
 - **THEN** transient operations receive no more than four total attempts with a
   2.5-second base backoff ceiling before jitter
+
+### Requirement: GCS retries have one application-owned budget
+
+The GCS target SHALL disable nested SDK storage retries and use the configured
+bounded retry engine for listing, archive upload, index replacement, and stale
+removal. It SHALL retry 429, 5xx, and eligible transport failures, materializing
+the entire listing within each retry attempt. Authentication, authorization,
+validation, and integrity failures SHALL NOT be retried. Deleting an already
+absent stale object SHALL succeed.
+
+#### Scenario: Restart an interrupted paginated GCS listing
+
+- **WHEN** consuming the GCS listing iterator fails transiently within the budget
+- **THEN** reconciliation restarts the family listing and discards partial results
+
+#### Scenario: Retry a GCS upload
+
+- **WHEN** an archive upload fails transiently after consuming stream bytes
+- **THEN** the next attempt rewinds and uploads the complete verified archive
+
+#### Scenario: Stale deletion response is lost
+
+- **WHEN** a repeated deletion finds that its stale GCS object is already absent
+- **THEN** cleanup treats the missing object as success

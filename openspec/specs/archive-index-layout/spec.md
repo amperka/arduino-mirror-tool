@@ -26,7 +26,7 @@ URL SHALL consist of the configured mirror host followed by that logical key.
 
 The system SHALL publish each transformed index below its family namespace and
 its complete configured input-index path relative to the origin host. It SHALL
-not publish either index at the target root. Local and S3-compatible targets
+not publish either index at the target root. Local, S3-compatible, and GCS targets
 SHALL exclude that index object from archive reconciliation.
 
 #### Scenario: Publish standard Arduino indexes

@@ -3,8 +3,8 @@
 ## Purpose
 
 Define the current contract for independently mirroring Arduino Boards Manager
-and Library Manager indexes from one configured HTTP origin to a local directory
-or S3-compatible target.
+and Library Manager indexes from one configured HTTP origin to a local directory,
+an S3-compatible target, or a GCS bucket.
 ## Requirements
 ### Requirement: Independent family commands
 
@@ -70,7 +70,8 @@ them
 
 The system SHALL reject an input index URL without a non-empty absolute path or
 with an empty, `.` or `..` path segment before target composition. It SHALL reject
-an S3 target without its bucket, access key, or secret key.
+an S3 target without its bucket, access key, or secret key. It SHALL reject a GCS
+target without its bucket; GCS SHALL use ADC and SHALL NOT require S3 credentials.
 
 #### Scenario: Reject an unusable input index
 
@@ -79,13 +80,11 @@ an S3 target without its bucket, access key, or secret key.
 
 ### Requirement: Safe, family-scoped publication order
 
-For a non-empty selected origin plan, the system SHALL reconcile that family's
-target inventory, publish every required archive, replace that family's index,
-and only then remove the reconciled stale archive keys. Reconciliation and
-cleanup SHALL affect only the selected family. The local target SHALL replace an
-index atomically; the S3-compatible target SHALL replace it with one object
-write. If selection has no origin archives, the system SHALL leave the existing
-family target state unchanged.
+For non-empty origin plans, the system SHALL reconcile the family inventory,
+publish all required archives, replace the family index, then remove reconciled
+stale keys. Reconciliation and cleanup SHALL affect only that family. The local
+target SHALL replace the index atomically; S3 and GCS SHALL use one object write.
+Empty origin selections SHALL leave existing family target state unchanged.
 
 #### Scenario: Fail before index replacement
 
@@ -96,12 +95,11 @@ family target state unchanged.
 ### Requirement: Reconcile target archives without unnecessary transfers
 
 The local target SHALL scan only the selected family namespace and retain an
-existing archive only when every declared integrity field matches: its declared
-size, when supplied, and its declared SHA-256, when supplied. The
-S3-compatible target SHALL use one family-prefix object listing, SHALL not make
-per-archive object requests, and SHALL retain an archive only when that listing
-reports the selected key with its declared size. It SHALL download and publish
-an archive that cannot be confirmed.
+archive only when all declared integrity fields match (size and/or SHA-256).
+S3-compatible and GCS targets SHALL use one family-prefix listing without
+per-archive object requests, retaining archives only when the listing confirms
+the selected key and its declared size. Targets SHALL download and publish any
+unconfirmed archive.
 
 #### Scenario: Replace a same-size local archive with a mismatched checksum
 
@@ -109,11 +107,11 @@ an archive that cannot be confirmed.
   from its declared SHA-256
 - **THEN** the local target downloads and publishes the selected origin bytes
 
-#### Scenario: Confirm S3 archives from one listing
+#### Scenario: Confirm cloud archives from one listing
 
 - **WHEN** a family-prefix listing contains selected archive keys with their
   declared sizes
-- **THEN** the S3-compatible target does not download or upload those archives
+- **THEN** the S3-compatible or GCS target does not download or upload those archives
 
 ### Requirement: Cooperative cancellation
 
@@ -148,3 +146,22 @@ credentials.
 - **WHEN** an operator runs a family command with `--log-level DEBUG`
 - **THEN** its records identify the completed family-specific publication
   boundaries in execution order without credentials
+
+### Requirement: GCS publication with federated credentials
+
+The system SHALL support `--target gcs` and `TARGET_KIND=gcs` using ADC. A preview
+SHALL NOT discover cloud credentials or construct an authenticated storage client.
+Production workflows SHALL export ADC using `GCP_WIF_PROVIDER` and
+`GCP_WIF_SERVICE_ACCOUNT` with `id-token: write` and SHALL publish independently
+to `amperka-arduino-downloads` without reading legacy S3 secrets.
+
+#### Scenario: Publish through GitHub WIF
+
+- **WHEN** either production family workflow runs
+- **THEN** it authenticates using WIF after checkout, uses the `prod` environment,
+  and publishes only its configured family to GCS
+
+#### Scenario: Preview without cloud credentials
+
+- **WHEN** an operator previews a GCS target with a bucket configured
+- **THEN** the system selects a plan without ADC discovery or GCS access

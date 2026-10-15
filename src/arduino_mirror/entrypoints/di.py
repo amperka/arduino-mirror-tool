@@ -1,5 +1,5 @@
 # region MODULE_CONTRACT
-# PURPOSE: Compose configured publication collaborators at the outermost layer so use cases retain no HTTP, filesystem, or S3 knowledge.
+# PURPOSE: Compose configured publication collaborators at the outermost layer so use cases retain no HTTP, filesystem, S3, or GCS knowledge.
 # SCOPE:
 # - Factories for CLI publication use cases.
 # - NOT: argument parsing, configuration resolution, index selection, or adapter implementation.
@@ -21,6 +21,7 @@ from arduino_mirror.application import (
 )
 from arduino_mirror.domain import IndexFamily, SelectionPolicy
 from arduino_mirror.infra import (
+    GcsPublicationTarget,
     HttpIndexSource,
     LocalPublicationTarget,
     RetryPolicy,
@@ -46,8 +47,15 @@ def make_publication_use_case(config: Config) -> PublishFamily:
         urls={config.family: config.input_index},
         retry_policy=retry_policy,
     )
-    target: LocalPublicationTarget | S3PublicationTarget
+    target: LocalPublicationTarget | S3PublicationTarget | GcsPublicationTarget
     match config.target:
+        case TargetKind.GCS:
+            target = GcsPublicationTarget(
+                bucket=config.bucket,
+                index_key=config.index_key,
+                prefix=config.prefix,
+                retry_policy=retry_policy,
+            )
         case TargetKind.LOCAL:
             target = LocalPublicationTarget(
                 root=config.local_root,
