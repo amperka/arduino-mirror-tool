@@ -9,12 +9,15 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: mirror-libraries-publication
 
 env:
-  TARGET_KIND: "s3"
+  TARGET_KIND: "gcs"
+  TARGET_BUCKET: "amperka-arduino-downloads"
+  TARGET_PREFIX: ""
 
 jobs:
   mirror:
@@ -31,12 +34,15 @@ jobs:
       - name: Install the project
         run: uv sync --locked
 
-      - name: Publish packages then libraries
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WIF_PROVIDER }}"
+          service_account: "${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}"
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Publish libraries
         env:
           MIRROR_HOST: "${{ vars.MIRROR_HOST }}"
-          TARGET_BUCKET: "${{ secrets.TARGET_BUCKET }}"
-          TARGET_ENDPOINT: "${{ secrets.TARGET_ENDPOINT }}"
-          TARGET_PREFIX: ""
-          AWS_ACCESS_KEY_ID: "${{ secrets.TARGET_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.TARGET_SECRET_ACCESS_KEY }}"
         run: uv run arduino-mirror libraries

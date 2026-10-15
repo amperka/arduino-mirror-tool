@@ -2,7 +2,7 @@
 # PURPOSE: Resolve the stable operator configuration once at the composition root so mock and future publication flows share CLI/environment precedence.
 # SCOPE:
 # - Immutable command settings, environment fallback, and target validation.
-# - NOT: argument parsing, index loading, HTTP, or S3 construction.
+# - NOT: argument parsing, index loading, HTTP, or storage-client construction.
 # INVARIANTS: An explicit CLI value wins; an empty environment value never replaces a default; each invocation selects one index family.
 # KEYWORDS: config, CLI, environment, settings, validation
 # endregion MODULE_CONTRACT
@@ -190,6 +190,7 @@ class TargetKind(StrEnum):
 
     LOCAL = "local"
     S3 = "s3"
+    GCS = "gcs"
 
 
 # endregion CLASS_TargetKind
@@ -262,6 +263,10 @@ class Config:
                 ]
                 if missing:
                     msg = f"s3 target requires {', '.join(missing)}"
+                    raise ValueError(msg)
+            case TargetKind.GCS:
+                if not self.bucket:
+                    msg = "gcs target requires bucket"
                     raise ValueError(msg)
             case TargetKind.LOCAL:
                 if not str(self.local_root):

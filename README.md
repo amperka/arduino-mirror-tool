@@ -4,7 +4,7 @@ Static, filtered mirror of Arduino Boards Manager packages and Library Manager
 libraries for networks where `downloads.arduino.cc` is unreachable. It keeps the
 latest selected releases, rewrites configured-origin archive URLs to a mirror
 host, verifies downloaded archive bytes, and publishes independently to an
-S3-compatible bucket or a local directory.
+GCS bucket, S3-compatible bucket, or a local directory.
 
 Package archives belong to `p/` and library archives to `l/`; the complete
 origin-relative path follows that stable namespace.  Indexes follow the same
@@ -34,6 +34,10 @@ selects latest configured-origin releases, verifies archives, uploads archives
 before its index, then cleans stale objects only within its own prefix.
 
 ```bash
+# Publish to GCS using Application Default Credentials (ADC).
+arduino-mirror packages --target gcs --bucket amperka-arduino-downloads
+arduino-mirror libraries --target gcs --bucket amperka-arduino-downloads
+
 # Publish configured Board Manager packages to S3-compatible storage.
 arduino-mirror packages \
   --target s3 \
@@ -107,21 +111,78 @@ uv run lint-imports
 openspec validate --all --json
 ```
 
-The integration and end-to-end suites start a local HTTP origin and use a local
-target. Unit tests also validate the MinIO client key mapping without credentials.
+The integration and end-to-end suites use a local HTTP origin and exercise local
+storage and the real GCS SDK against a loopback JSON API stub. These tests do not
+validate live WIF/IAM or resumable uploads. Unit tests also validate storage
+client key mapping, retries, and cancellation without cloud credentials.
+An optional integration smoke uses a real rclone executable on `PATH` with
+synthetic ADC and loopback token/storage endpoints. It skips when the binary is
+unavailable, resolves to a user-configured shim, or rejects loopback STS URLs.
+It checks authentication/listing and a dry run, not GitHub OIDC, IAM, or uploads.
 
 ## Deployment
 
-The scheduled GitHub Actions workflows runs
-`arduino-mirror packages` and `arduino-mirror libraries`. Configure these
-repository secrets:
+All three scheduled publication workflows use the `prod` environment and the
+same existing GCS bucket, `gs://amperka-arduino-downloads`. The independent
+`arduino-mirror packages` and `arduino-mirror libraries` pipelines own `p/` and
+`l/`; the XOD workflow owns `xod-fix/`. The public host remains
+`https://arduino-downloads.amperka.ru`.
+
+Configure these repository secrets (or `prod` environment secrets):
 
 | Name | Value |
 | --- | --- |
-| `TARGET_BUCKET` | S3 bucket name |
-| `TARGET_ENDPOINT` | S3 endpoint, for example `storage.yandexcloud.net` |
-| `TARGET_ACCESS_KEY_ID` | S3 access key |
-| `TARGET_SECRET_ACCESS_KEY` | S3 secret key |
+| `GCP_WIF_PROVIDER` | Full `projects/NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER` resource name |
+| `GCP_WIF_SERVICE_ACCOUNT` | Service-account email to impersonate |
 
-The bucket must allow anonymous read for clients to download published archives
-and indexes.
+The workflows grant `id-token: write` and use
+[`google-github-actions/auth@v3`](https://github.com/google-github-actions/auth)
+to export an ADC credential file. The Python SDK and rclone use these refreshable
+credentials; no static access token, service-account key, S3 endpoint, or HMAC key
+is needed.
+Generated `gha-creds-*.json` files are ignored by Git and removed by the auth
+action after the job.
+
+Required infrastructure, managed outside this repository:
+
+- The WIF trust must admit this repository and the `prod` environment context.
+  The external principal needs `roles/iam.workloadIdentityUser` on the service
+  account.
+- The service account needs object list/create/get/delete permissions on this
+  bucket; bucket-scoped
+  [`roles/storage.objectAdmin`](https://docs.cloud.google.com/storage/docs/access-control/iam-roles)
+  covers publication, overwrite, and stale cleanup. Bucket creation or IAM
+  administration is not needed.
+- The existing public host must route to this GCS bucket and allow anonymous
+  object downloads. This change does not alter bucket IAM, DNS, or HTTPS routing.
+
+For local publication, configure ADC with `gcloud auth application-default login`
+or supply `GOOGLE_APPLICATION_CREDENTIALS` pointing to an ADC configuration, then
+use `--target gcs --bucket amperka-arduino-downloads`. A preview needs no ADC:
+
+```bash
+arduino-mirror packages --dry-run --target gcs --bucket amperka-arduino-downloads
+```
+
+The packages workflow preserves the local package overlay and resolves
+`MIRROR_HOST`, `ARCHITECTURES`, `PACKAGES`, `PINNED_TOOLS`, and
+`PINNED_PLATFORMS` from GitHub variables. The libraries workflow also resolves
+`MIRROR_HOST` from GitHub variables. Empty values retain the CLI defaults.
+
+The `xod-fix-packages` workflow keeps its existing build and archive validation,
+then uses [rclone's native GCS backend](https://rclone.org/googlecloudstorage/#application-default-credentials)
+with ADC to synchronize `dist/` only to
+`gs://amperka-arduino-downloads/xod-fix/`. Bucket-policy-only mode omits object
+ACLs; public downloads use the existing bucket IAM. The workflow skips bucket
+creation/existence checks, and its stale cleanup never targets `p/` or `l/`.
+
+After authorized first production runs of **all three workflows**, verify the
+public indexes at `/p/packages/package_index.json` and
+`/l/libraries/library_index.json`, download at least one archive from each, and
+check all three XOD archives under `/xod-fix/`. None of these workflows reads
+legacy `TARGET_BUCKET`, `TARGET_ENDPOINT`, `TARGET_ACCESS_KEY_ID`, or
+`TARGET_SECRET_ACCESS_KEY` secrets. Retire those secrets and old storage keys
+only after these checks and confirmation that they have no other consumers.
+Local/S3 CLI support remains available, and the CLI default remains `s3`.
+No secrets or keys are deleted automatically. This change does not copy existing
+objects from the old bucket.
