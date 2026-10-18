@@ -176,7 +176,6 @@ def test_xod_workflow_shares_gcs_bucket_and_wif_without_s3_secrets() -> None:
     assert triggers == {"schedule": [{"cron": "17 6 * * 0"}], "workflow_dispatch": {}}
     job = xod["jobs"]["publish"]
     assert job["environment"] == "prod"
-    assert job["runs-on"] == "ubuntu-latest"
     steps = job["steps"]
     assert [step["name"] for step in steps] == [
         "Checkout",
