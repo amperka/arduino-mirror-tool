@@ -34,8 +34,8 @@ and operator output SHALL be technical English.
 ### Requirement: Scheduled XOD archive publication
 
 The repository SHALL provide a GitHub Actions workflow that runs every Sunday
-at 06:17 UTC and supports `workflow_dispatch`. It SHALL use `ubuntu-latest`, the
-`prod` environment, read-only repository contents, and `id-token: write`.
+at 06:17 UTC and supports `workflow_dispatch`. It SHALL use the `prod`
+environment, read-only repository contents, and `id-token: write`.
 It SHALL install rclone from APT, set `MIRROR_HOST` from `vars.MIRROR_HOST`, and
 invoke the unchanged XOD build script. It SHALL NOT use the Python application,
 its dependency installation, or AWS CLI.
